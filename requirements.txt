@@ -4,3 +4,4 @@ numpy
 requests
 websocket-client
 setuptools
+pytz
