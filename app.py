@@ -620,60 +620,7 @@ def display_fetch_result(
             )
 
 
-# ============================================================
-# TEST SINGLE SYMBOL
-# ============================================================
-
-def test_tradingview_symbol(
-    tv,
-    symbol="SBIN"
-):
-
-    st.subheader(
-        f"🧪 TradingView Test — {symbol}"
-    )
-
-    try:
-
-        df = fetch_one_stock(
-            tv=tv,
-            symbol=symbol,
-            n_bars=500,
-            retries=1
-        )
-
-        st.success(
-            f"✅ {symbol} working — "
-            f"{len(df):,} candles received."
-        )
-
-        st.write(
-            "Columns:",
-            list(df.columns)
-        )
-
-        st.dataframe(
-            df.tail(20),
-            use_container_width=True,
-            hide_index=True
-        )
-
-        return True
-
-    except Exception as e:
-
-        st.error(
-            f"❌ {symbol} test failed:"
-        )
-
-        st.code(
-            repr(e)
-        )
-
-        return False
-
-test_tradingview_symbol(tv,symbol="SBIN")
-
+#
 # ============================================================
 # RMA
 # ============================================================
