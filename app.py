@@ -278,7 +278,10 @@ def fetch_one_stock(
                 extended_session=False,
             )
 
-            df = normalize_tv_data(raw,symbol)
+            df = normalize_tv_data(
+             raw,
+             symbol
+             )
 
             if (
                 df is None
