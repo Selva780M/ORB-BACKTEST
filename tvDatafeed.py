@@ -346,7 +346,11 @@ class TvDatafeed:
             )
         )
 
-
+    if isinstance(interval, Interval):
+        interval = interval.value
+    else:
+        interval = str(interval)
+        
     # ========================================================
     # SEND MESSAGE
     # ========================================================
