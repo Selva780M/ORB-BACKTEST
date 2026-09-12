@@ -20,7 +20,7 @@ st.set_page_config(
 # NIFTY STOCKS
 # ============================================================
 
-NIFTY_SYMBOLS = [
+symbol = [
     "ADANIENT",
     "ADANIPORTS",
     "APOLLOHOSP",
