@@ -743,36 +743,49 @@ class TvDatafeed:
             ]
         )
 
-        # ====================================================
+        # ========================================================
         # SYMBOL RESOLUTION
-        # ====================================================
-
+        # ========================================================
+        
         session_type = (
             "extended"
             if extended_session
             else "regular"
         )
-
+        
         symbol_id = "sds_sym_1"
-
+        
+        # --------------------------------------------------------
+        # TradingView symbol payload
+        # --------------------------------------------------------
+        
         symbol_payload = (
             '={"symbol":"'
             + symbol
-            + '","adjustment":"splits","session":"'
+            + '","adjustment":"splits"'
+            + ',"session":"'
             + session_type
-            + '"}'
+            + '"'
+            + ',"currencyCode":"INR"'
+            + ',"unitId":"base"'
+            + '}'
         )
-
+        
         logging.info(
             "TradingView resolving symbol = %s",
             symbol
         )
-
+        
         logging.info(
             "TradingView symbol_id = %s",
             symbol_id
         )
-
+        
+        logging.info(
+            "TradingView symbol_payload = %s",
+            symbol_payload
+        )
+        
         self.__send_message(
             "resolve_symbol",
             [
@@ -781,7 +794,6 @@ class TvDatafeed:
                 symbol_payload
             ]
         )
-
         # ====================================================
         # CREATE SERIES
         # ====================================================
