@@ -1117,7 +1117,7 @@ class TvDatafeed:
                     self.chart_session,
 
                     "symbol_1",
-                    
+                    "=" +
                     symbol_payload,
                 ]
             )
