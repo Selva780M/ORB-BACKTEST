@@ -1017,34 +1017,20 @@ class TvDatafeed:
         # ====================================================
         # QUOTE SESSION
         # ====================================================
-        #
-        # IMPORTANT
-        # Your failing code did not follow the reference
-        # sequence here.
-        #
-        # ====================================================
-
+        
         self.__send_message(
             "quote_create_session",
-            [
-                self.session
-            ]
+            [self.session]
         )
-
-
+        
         # ====================================================
         # QUOTE FIELDS
         # ====================================================
-        #
-        # SAME AS WORKING REFERENCE
-        #
-        # ====================================================
-
+        
         self.__send_message(
             "quote_set_fields",
             [
                 self.session,
-
                 "ch",
                 "chp",
                 "current_session",
@@ -1070,34 +1056,22 @@ class TvDatafeed:
                 "rtc",
             ]
         )
-
-
+        
         # ====================================================
-        # QUOTE ADD SYMBOLS
+        # QUOTE ADD SYMBOL
         # ====================================================
-        #
-        # SAME AS WORKING REFERENCE
-        #
-        # ====================================================
-
+        
         self.__send_message(
             "quote_add_symbols",
             [
                 self.session,
                 symbol,
                 {
-                    "flags": [
-                        "force_permission"
-                    ]
+                    "flags": ["force_permission"]
                 }
             ]
         )
-
-
-        # ====================================================
-        # QUOTE FAST SYMBOLS
-        # ====================================================
-
+        
         self.__send_message(
             "quote_fast_symbols",
             [
@@ -1105,34 +1079,13 @@ class TvDatafeed:
                 symbol
             ]
         )
-
-
+        
         # ====================================================
         # RESOLVE SYMBOL
         # ====================================================
-        #
-        # VERY IMPORTANT
-        #
-        # OLD / FAILING:
-        #
-        #     sds_sym_1
-        #
-        # WORKING REFERENCE:
-        #
-        #     symbol_1
-        #
-        # ====================================================
-
+        
         symbol_id = "symbol_1"
-
-
-        session_type = (
-            "extended"
-            if extended_session
-            else "regular"
-        )
-
-
+        
         symbol_payload = (
             '={"symbol":"'
             + symbol
@@ -1144,73 +1097,36 @@ class TvDatafeed:
             )
             + "}"
         )
-
-
-        logging.info(
-            "TradingView symbol_id = %s",
-            symbol_id
-        )
-
-        logging.info(
-            "TradingView symbol_payload = %s",
-            symbol_payload
-        )
-
-
+        
         self.__send_message(
             "resolve_symbol",
             [
                 self.chart_session,
-                symbol_id,
+                "symbol_1",
                 symbol_payload
             ]
         )
-
-
+        
         # ====================================================
         # CREATE SERIES
         # ====================================================
-        #
-        # SAME AS WORKING REFERENCE
-        #
-        # IMPORTANT:
-        #
-        # sds_1  -> WRONG for your reference
-        #
-        # s1     -> correct
-        #
-        # ====================================================
-
-        create_series_args = [
-            self.chart_session,
-            "s1",
-            "s1",
-            "symbol_1",
-            interval_value,
-            n_bars
-        ]
-
-
-        logging.info(
-            "CREATE_SERIES = %r",
-            create_series_args
-        )
-
-
+        
         self.__send_message(
             "create_series",
-            create_series_args
+            [
+                self.chart_session,
+                "s1",
+                "s1",
+                "symbol_1",
+                interval_value,
+                int(n_bars)
+            ]
         )
-
-
+        
         # ====================================================
         # TIMEZONE
         # ====================================================
-        #
-        # SAME AS WORKING REFERENCE
-        #
-        # ====================================================
-
+        
         self.__send_message(
             "switch_timezone",
             [
@@ -1218,8 +1134,6 @@ class TvDatafeed:
                 "exchange"
             ]
         )
-
-
         # ====================================================
         # RECEIVE DATA
         # ====================================================
