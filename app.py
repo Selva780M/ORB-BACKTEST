@@ -57,123 +57,46 @@ def get_secret(name):
 
 @st.cache_resource
 def create_tv_connection():
-
-    # ========================================================
-    # READ ALL TRADINGVIEW CREDENTIAL TYPES
-    # ========================================================
-
     sessionid = get_secret("TV_SESSIONID")
+    sessionid_sign = get_secret("TV_SESSIONID_SIGN")
+    auth_token = get_secret("TV_AUTH_TOKEN")
+    token = get_secret("TV_TOKEN")
+    username = get_secret("TV_USERNAME")
+    password = get_secret("TV_PASSWORD")
 
-    sessionid_sign = get_secret(
-        "TV_SESSIONID_SIGN"
-    )
+    st.sidebar.caption(f"📁 tvDatafeed: {tvDatafeed.__file__}")
 
-    auth_token = get_secret(
-        "TV_AUTH_TOKEN"
-    )
-
-    token = get_secret(
-        "TV_TOKEN"
-    )
-
-    username = get_secret(
-        "TV_USERNAME"
-    )
-
-    password = get_secret(
-        "TV_PASSWORD"
-    )
-
-    # ========================================================
-    # SHOW ACTUAL tvDatafeed.py
-    # ========================================================
-
-    try:
-
-        st.sidebar.caption(
-            f"📁 tvDatafeed: {tvDatafeed.__file__}"
-        )
-
-    except Exception:
-
-        pass
-
-    # ========================================================
-    # 1. SESSIONID
-    # ========================================================
-
-    if sessionid:
-
-        st.sidebar.success(
-            "🔐 TradingView: SESSIONID"
-        )
-
+    if sessionid and sessionid_sign:
+        st.sidebar.success("🔐 TradingView: sessionid")
         return TvDatafeed(
-
+            username=username,
+            password=password,
+            token=auth_token,
             sessionid=sessionid,
-
             sessionid_sign=sessionid_sign,
         )
 
-    # ========================================================
-    # 2. AUTH TOKEN
-    # ========================================================
-
     if auth_token:
-
-        st.sidebar.success(
-            "🔐 TradingView: AUTH TOKEN"
-        )
-
+        st.sidebar.success("🔐 TradingView: auth_token")
         return TvDatafeed(
             token=auth_token
         )
 
-    # ========================================================
-    # 3. OLD TV_TOKEN
-    # ========================================================
-
     if token:
-
-        st.sidebar.success(
-            "🔐 TradingView: TOKEN"
-        )
-
+        st.sidebar.success("🔐 TradingView: token")
         return TvDatafeed(
             token=token
         )
 
-    # ========================================================
-    # 4. USERNAME / PASSWORD
-    # ========================================================
-
     if username and password:
-
-        st.sidebar.success(
-            "🔐 TradingView: USERNAME/PASSWORD"
-        )
-
+        st.sidebar.success("🔐 TradingView: username/password")
         return TvDatafeed(
-
             username=username,
-
             password=password,
         )
 
-    # ========================================================
-    # 5. ANONYMOUS
-    # ========================================================
-
-    st.sidebar.warning(
-        "⚠️ TradingView credentials not found."
-    )
-
-    st.sidebar.info(
-        "Using anonymous TradingView connection."
-    )
-
+    st.sidebar.warning("⚠️ TradingView: anonymous")
     return TvDatafeed()
-
 
 
 # ============================================================
