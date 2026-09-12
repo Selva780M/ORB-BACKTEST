@@ -40,13 +40,7 @@ class TvDatafeed:
         password: str = None,
         token: str = None
     ) -> None:
-        """Create TvDatafeed object
-
-        Args:
-            username (str, optional): tradingview username. Defaults to None.
-            password (str, optional): tradingview password. Defaults to None.
-        """
-
+   
         self.ws_debug = False
 
         if token:
@@ -149,7 +143,6 @@ class TvDatafeed:
                 row = [ts_ist]
 
                 for i in range(5, 10):
-
                     # skip converting volume data if does not exists
                     if not volume_data and i == 9:
                         row.append(0.0)
@@ -195,27 +188,12 @@ class TvDatafeed:
         fut_contract: int = None,
         extended_session: bool = False,
     ) -> pd.DataFrame:
-        """Get historical data
-    
-        Args:
-            symbol (str): Symbol name.
-            exchange (str, optional): Exchange, not required if symbol is in the format EXCHANGE:SYMBOL. Defaults to "NSE".
-            interval (Interval, optional): Chart interval. Defaults to Interval.in_daily.
-            n_bars (int, optional): Number of bars to download, max 5000. Defaults to 10.
-            fut_contract (int, optional): None for cash, 1 for continuous current contract in front, 2 for continuous next contract in front. Defaults to None.
-            extended_session (bool, optional): Regular session if False, extended session if True. Defaults to False.
-    
-        Returns:
-            pd.DataFrame: DataFrame with OHLCV as columns.
-        """
         symbol = self.__format_symbol(
-            symbol=symbol, exchange=exchange, contract=fut_contract
-        )
+            symbol=symbol, exchange=exchange, contract=fut_contract)
     
         interval = interval.value
     
-        self.__create_connection()
-    
+        self.__create_connection()    
         self.__send_message("set_auth_token", [self.token])  # Fixed method call
         self.__send_message("chart_create_session", [self.chart_session, ""])  # Fixed method call
         self.__send_message("quote_create_session", [self.session])  # Fixed method call
@@ -272,9 +250,6 @@ class TvDatafeed:
         self.__send_message("switch_timezone", [self.chart_session, "exchange"])  # Fixed method call
     
         raw_data = ""
-        # Additional processing here to return the desired DataFrame
-    
-        
         while True:
             try:
                 result = self.ws.recv()
@@ -303,11 +278,5 @@ class TvDatafeed:
         return symbols_list
 
 
-if __name__ == "__main__":
 
-    logging.info(
-        "Starting TradingView test..."
-    )
-
-    tv = TvDatafeed()
 
