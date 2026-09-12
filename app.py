@@ -671,7 +671,9 @@ def test_tradingview_symbol(
         )
 
         return False
-        
+
+test_tradingview_symbol(tv,symbol="SBIN")
+
 # ============================================================
 # RMA
 # ============================================================
