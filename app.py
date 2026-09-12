@@ -52,26 +52,16 @@ def get_secret(name):
 def create_tv_connection():
 
     token = get_secret("TV_TOKEN")
-    st.write(token)
-
-    username = get_secret(
-        "TV_USERNAME"
-    )
-    st.write(username)
-    
-    password = get_secret(
-        "TV_PASSWORD"
-    )
+    username = get_secret("TV_USERNAME")
+    password = get_secret("TV_PASSWORD")
 
     # --------------------------------------------------------
     # TOKEN LOGIN
     # --------------------------------------------------------
 
     if token:
-
         return TvDatafeed(
-            token=token
-        )
+            token=token)
 
     # --------------------------------------------------------
     # USERNAME / PASSWORD
