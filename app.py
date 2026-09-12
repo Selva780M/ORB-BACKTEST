@@ -29,8 +29,15 @@ def get_tv():
 
     return TvDatafeed()
 
+@st.cache_resource
+def Int():
+
+    return Interval()
+
+
 
 tv = get_tv()
+intr = Int()
 
 
 # ============================================================
@@ -55,7 +62,7 @@ if st.button(
             df = tv.get_hist(
                 symbol="SBIN",
                 exchange="NSE",
-                interval=Interval.in_5_minute,
+                interval=intr.in_5_minute,
                 n_bars=500
             )
 
