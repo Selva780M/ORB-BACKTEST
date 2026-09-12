@@ -1,11 +1,14 @@
-
 import os
 import time as pytime
 from datetime import time
+
 import numpy as np
 import pandas as pd
 import streamlit as st
-from tvDatafeed import TvDatafeed
+
+import tvDatafeed
+from tvDatafeed import TvDatafeed, Interval
+
 
 st.set_page_config(
     page_title="TradingView ORB Backtest",
@@ -22,7 +25,6 @@ NIFTY_SYMBOLS = [
     "ADANIENT",
     "ADANIPORTS",
     "APOLLOHOSP",
-
 ]
 
 
@@ -38,15 +40,22 @@ def get_secret(name):
         return value
 
     try:
-        return st.secrets[name]
+        value = st.secrets[name]
+
+        if value:
+            return value
+
     except Exception:
-        return None
+        pass
+
+    return None
 
 
 # ============================================================
 # TRADINGVIEW CONNECTION
 # ============================================================
 
+@st.cache_resource
 def create_tv_connection():
 
     token = get_secret("TV_TOKEN")
@@ -54,12 +63,29 @@ def create_tv_connection():
     password = get_secret("TV_PASSWORD")
 
     # --------------------------------------------------------
+    # SHOW WHICH tvDatafeed.py IS ACTUALLY LOADED
+    # --------------------------------------------------------
+
+    try:
+        st.sidebar.caption(
+            f"📁 tvDatafeed: {tvDatafeed.__file__}"
+        )
+    except Exception:
+        pass
+
+    # --------------------------------------------------------
     # TOKEN LOGIN
     # --------------------------------------------------------
 
     if token:
+
+        st.sidebar.success(
+            "🔐 TradingView: TOKEN"
+        )
+
         return TvDatafeed(
-            token=token)
+            token=token
+        )
 
     # --------------------------------------------------------
     # USERNAME / PASSWORD
@@ -67,15 +93,28 @@ def create_tv_connection():
 
     if username and password:
 
+        st.sidebar.success(
+            "🔐 TradingView: USERNAME/PASSWORD"
+        )
+
         return TvDatafeed(
             username=username,
             password=password
         )
 
-    raise RuntimeError(
-        "TradingView credentials not found.\n\n"
-        "Set TV_TOKEN or TV_USERNAME + TV_PASSWORD."
+    # --------------------------------------------------------
+    # ANONYMOUS CONNECTION
+    # --------------------------------------------------------
+
+    st.sidebar.warning(
+        "⚠️ TradingView credentials not found."
     )
+
+    st.sidebar.info(
+        "Using anonymous TradingView connection."
+    )
+
+    return TvDatafeed()
 
 
 # ============================================================
@@ -88,17 +127,21 @@ def normalize_tv_data(
 ):
 
     if df is None:
-
         return None
 
-    if df.empty:
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError(
+            f"{symbol}: TradingView returned "
+            f"{type(df).__name__}, not DataFrame"
+        )
 
+    if df.empty:
         return None
 
     df = df.copy()
 
     # --------------------------------------------------------
-    # RESET INDEX
+    # RESET DATETIME INDEX
     # --------------------------------------------------------
 
     if isinstance(
@@ -109,21 +152,20 @@ def normalize_tv_data(
         df = df.reset_index()
 
     # --------------------------------------------------------
-    # RENAME
+    # RENAME COLUMNS
     # --------------------------------------------------------
 
     rename_map = {}
 
     for col in df.columns:
 
-        c = str(
-            col
-        ).strip().lower()
+        c = str(col).strip().lower()
 
         if c in [
             "datetime",
             "date",
             "time",
+            "timestamp",
             "index"
         ]:
 
@@ -145,7 +187,10 @@ def normalize_tv_data(
 
             rename_map[col] = "close"
 
-        elif c == "volume":
+        elif c in [
+            "volume",
+            "vol"
+        ]:
 
             rename_map[col] = "volume"
 
@@ -154,7 +199,7 @@ def normalize_tv_data(
     )
 
     # --------------------------------------------------------
-    # REQUIRED
+    # REQUIRED COLUMNS
     # --------------------------------------------------------
 
     required = [
@@ -167,15 +212,19 @@ def normalize_tv_data(
     ]
 
     missing = [
-        x for x in required
-        if x not in df.columns
+        col
+        for col in required
+        if col not in df.columns
     ]
 
     if missing:
 
+        available = list(df.columns)
+
         raise ValueError(
             f"{symbol}: missing columns "
-            f"{missing}"
+            f"{missing}. "
+            f"Available columns: {available}"
         )
 
     # --------------------------------------------------------
@@ -191,13 +240,15 @@ def normalize_tv_data(
     # NUMERIC
     # --------------------------------------------------------
 
-    for col in [
+    numeric_columns = [
         "open",
         "high",
         "low",
         "close",
         "volume"
-    ]:
+    ]
+
+    for col in numeric_columns:
 
         df[col] = pd.to_numeric(
             df[col],
@@ -218,6 +269,13 @@ def normalize_tv_data(
         ]
     )
 
+    if df.empty:
+
+        raise ValueError(
+            f"{symbol}: all rows became invalid "
+            f"after datetime/numeric conversion"
+        )
+
     # --------------------------------------------------------
     # SYMBOL
     # --------------------------------------------------------
@@ -233,10 +291,18 @@ def normalize_tv_data(
         .sort_values(
             "datetime"
         )
+        .drop_duplicates(
+            subset=["datetime"],
+            keep="last"
+        )
         .reset_index(
             drop=True
         )
     )
+
+    # --------------------------------------------------------
+    # FINAL DATAFRAME
+    # --------------------------------------------------------
 
     return df[
         [
@@ -264,9 +330,16 @@ def fetch_one_stock(
 
     last_error = None
 
-    for attempt in range(retries + 1):
+    for attempt in range(
+        retries + 1
+    ):
 
         try:
+
+            # ------------------------------------------------
+            # IMPORTANT:
+            # NSE CASH STOCK => fut_contract=None
+            # ------------------------------------------------
 
             raw = tv.get_hist(
                 symbol=symbol,
@@ -276,6 +349,37 @@ def fetch_one_stock(
                 fut_contract=None,
                 extended_session=False,
             )
+
+            # ------------------------------------------------
+            # DEBUG
+            # ------------------------------------------------
+
+            if raw is None:
+
+                raise ValueError(
+                    f"{symbol}: TradingView returned None"
+                )
+
+            if not isinstance(
+                raw,
+                pd.DataFrame
+            ):
+
+                raise ValueError(
+                    f"{symbol}: invalid response type: "
+                    f"{type(raw).__name__}"
+                )
+
+            if raw.empty:
+
+                raise ValueError(
+                    f"{symbol}: TradingView returned "
+                    f"an empty DataFrame"
+                )
+
+            # ------------------------------------------------
+            # NORMALIZE
+            # ------------------------------------------------
 
             df = normalize_tv_data(
                 raw,
@@ -288,8 +392,12 @@ def fetch_one_stock(
             ):
 
                 raise ValueError(
-                    "No data returned"
+                    f"{symbol}: No candle data after normalization"
                 )
+
+            # ------------------------------------------------
+            # SUCCESS
+            # ------------------------------------------------
 
             return df
 
@@ -301,9 +409,14 @@ def fetch_one_stock(
 
                 pytime.sleep(1)
 
+    # --------------------------------------------------------
+    # FINAL ERROR
+    # --------------------------------------------------------
+
     raise RuntimeError(
-        f"{symbol}: {last_error}"
+        f"{symbol}: {repr(last_error)}"
     )
+
 
 # ============================================================
 # FETCH ALL STOCKS
@@ -320,15 +433,32 @@ def fetch_all_stocks(
 
     failed = []
 
+    # --------------------------------------------------------
+    # PROGRESS
+    # --------------------------------------------------------
+
     progress = st.progress(
         0
     )
 
     status = st.empty()
 
-    total = len(
-        symbols
-    )
+    total = len(symbols)
+
+    if total == 0:
+
+        status.error(
+            "❌ No symbols found."
+        )
+
+        return (
+            data,
+            failed
+        )
+
+    # --------------------------------------------------------
+    # LOOP STOCKS
+    # --------------------------------------------------------
 
     for i, symbol in enumerate(
         symbols
@@ -336,7 +466,7 @@ def fetch_all_stocks(
 
         status.info(
             f"📡 Fetching "
-            f"{symbol} "
+            f"**{symbol}** "
             f"({i + 1}/{total})"
         )
 
@@ -345,30 +475,70 @@ def fetch_all_stocks(
             df = fetch_one_stock(
                 tv=tv,
                 symbol=symbol,
-                n_bars=n_bars,
+                n_bars=int(n_bars),
                 retries=2
             )
 
+            if (
+                df is None
+                or df.empty
+            ):
+
+                raise ValueError(
+                    "Empty dataframe"
+                )
+
             data[symbol] = df
 
+            st.toast(
+                f"✅ {symbol}: "
+                f"{len(df):,} candles",
+                icon="📈"
+            )
+
         except Exception as e:
+
+            error_text = str(e)
 
             failed.append(
                 {
                     "Symbol": symbol,
-                    "Error": str(e)
+                    "Error": error_text
                 }
             )
 
+            # ------------------------------------------------
+            # SHOW ERROR IMMEDIATELY
+            # ------------------------------------------------
+
+            st.warning(
+                f"⚠️ {symbol} failed: "
+                f"{error_text}"
+            )
+
+        # ----------------------------------------------------
+        # PROGRESS
+        # ----------------------------------------------------
+
         progress.progress(
-            (i + 1) / total
+            int(
+                ((i + 1) / total) * 100
+            )
         )
+
+        # ----------------------------------------------------
+        # DELAY
+        # ----------------------------------------------------
 
         if delay > 0:
 
             pytime.sleep(
-                delay
+                float(delay)
             )
+
+    # --------------------------------------------------------
+    # CLEANUP
+    # --------------------------------------------------------
 
     progress.empty()
 
@@ -380,6 +550,128 @@ def fetch_all_stocks(
     )
 
 
+# ============================================================
+# DISPLAY FETCH RESULT
+# ============================================================
+
+def display_fetch_result(
+    data,
+    failed
+):
+
+    # --------------------------------------------------------
+    # SUCCESS
+    # --------------------------------------------------------
+
+    if data:
+
+        st.success(
+            f"✅ Loaded {len(data)} stocks."
+        )
+
+        summary = []
+
+        for symbol, df in data.items():
+
+            summary.append(
+                {
+                    "Symbol": symbol,
+                    "Candles": len(df),
+                    "Start": df["datetime"].min(),
+                    "End": df["datetime"].max(),
+                }
+            )
+
+        summary_df = pd.DataFrame(
+            summary
+        )
+
+        st.dataframe(
+            summary_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+
+        st.error(
+            "❌ Loaded 0 stocks."
+        )
+
+    # --------------------------------------------------------
+    # FAILED SYMBOLS
+    # --------------------------------------------------------
+
+    if failed:
+
+        with st.expander(
+            f"❌ Failed Symbols ({len(failed)})",
+            expanded=True
+        ):
+
+            failed_df = pd.DataFrame(
+                failed
+            )
+
+            st.dataframe(
+                failed_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+
+# ============================================================
+# TEST SINGLE SYMBOL
+# ============================================================
+
+def test_tradingview_symbol(
+    tv,
+    symbol="SBIN"
+):
+
+    st.subheader(
+        f"🧪 TradingView Test — {symbol}"
+    )
+
+    try:
+
+        df = fetch_one_stock(
+            tv=tv,
+            symbol=symbol,
+            n_bars=500,
+            retries=1
+        )
+
+        st.success(
+            f"✅ {symbol} working — "
+            f"{len(df):,} candles received."
+        )
+
+        st.write(
+            "Columns:",
+            list(df.columns)
+        )
+
+        st.dataframe(
+            df.tail(20),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        return True
+
+    except Exception as e:
+
+        st.error(
+            f"❌ {symbol} test failed:"
+        )
+
+        st.code(
+            repr(e)
+        )
+
+        return False
+        
 # ============================================================
 # RMA
 # ============================================================
