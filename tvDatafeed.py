@@ -1143,7 +1143,7 @@ class TvDatafeed:
 
                     "symbol_1",
 
-                    "5",
+                    str(interval_value),
 
                     int(n_bars),
                 ]
