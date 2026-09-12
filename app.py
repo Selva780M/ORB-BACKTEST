@@ -390,3 +390,10 @@ This should request:
 
 ```text
 NSE:SBIN
+
+and not:
+
+NSE:SBIN0!
+
+"""
+)
