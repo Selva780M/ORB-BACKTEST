@@ -1,12 +1,11 @@
-
 # ============================================================
-# STREAMLIT - TRADINGVIEW HISTORICAL DATA TEST
+# STREAMLIT TEST
 # ============================================================
 
 import streamlit as st
 import tvDatafeed
 
-from tvDatafeed import TvDatafeed, Interval
+from tvDatafeed import TvDatafeed
 
 
 # ============================================================
@@ -24,7 +23,9 @@ st.set_page_config(
 # TITLE
 # ============================================================
 
-st.title("📈 TradingView Historical Data Test")
+st.title(
+    "📈 TradingView Historical Data Test"
+)
 
 st.write(
     "Testing NSE cash symbol: **SBIN**"
@@ -32,24 +33,12 @@ st.write(
 
 
 # ============================================================
-# SHOW LOADED FILE
+# DEBUG
 # ============================================================
 
 st.info(
-    f"**tvDatafeed loaded from:**\n\n"
+    f"tvDatafeed loaded from:\n\n"
     f"`{tvDatafeed.__file__}`"
-)
-
-
-# ============================================================
-# INTERVAL TEST
-# ============================================================
-
-st.write(
-    "**Interval test:**",
-    Interval.in_5_minute,
-    "→",
-    Interval.in_5_minute.value
 )
 
 
@@ -63,15 +52,12 @@ def get_tv():
     return TvDatafeed()
 
 
-# Create TradingView object
 tv = get_tv()
 
 
-# ============================================================
-# TV CONNECTION STATUS
-# ============================================================
-
-st.success("✅ TvDatafeed object created")
+st.success(
+    "✅ TvDatafeed loaded successfully"
+)
 
 
 # ============================================================
@@ -84,213 +70,165 @@ if st.button(
     use_container_width=True
 ):
 
-    st.write("### 🔄 Fetching data...")
-
     try:
 
-        # ====================================================
-        # IMPORTANT
-        # ====================================================
-
-        interval = Interval.in_5_minute
-
-        st.write(
-            "Sending:",
-            f"`{interval}`",
-            "→",
-            f"`{interval.value}`"
-        )
-
-
-        # ====================================================
-        # GET HISTORICAL DATA
-        # ====================================================
-
         with st.spinner(
-            "Connecting to TradingView and downloading candles..."
+            "Connecting to TradingView..."
         ):
 
+            # IMPORTANT:
+            # Send TradingView interval directly as string.
             df = tv.get_hist(
                 symbol="SBIN",
                 exchange="NSE",
-                interval=interval,
+                interval="5",
                 n_bars=500
             )
 
 
         # ====================================================
-        # CHECK RESULT
+        # RESULT
         # ====================================================
 
-        if df is None:
+        if df is None or df.empty:
 
             st.error(
-                "❌ TradingView returned None"
+                "❌ NO DATA"
             )
 
-            st.stop()
-
-
-        if df.empty:
-
-            st.error(
-                "❌ TradingView returned EMPTY data"
+            st.warning(
+                "TradingView did not return candle data."
             )
 
-            st.stop()
+        else:
 
-
-        # ====================================================
-        # SUCCESS
-        # ====================================================
-
-        st.success(
-            f"✅ Historical data received successfully — "
-            f"{len(df)} candles"
-        )
-
-
-        # ====================================================
-        # DATA INFO
-        # ====================================================
-
-        col1, col2, col3, col4 = st.columns(4)
-
-
-        with col1:
-
-            st.metric(
-                "Rows",
-                len(df)
+            st.success(
+                f"✅ Data received successfully — "
+                f"{len(df)} candles"
             )
 
 
-        with col2:
+            # =================================================
+            # METRICS
+            # =================================================
 
-            st.metric(
-                "Symbol",
-                "SBIN"
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+
+                st.metric(
+                    "Rows",
+                    len(df)
+                )
+
+            with col2:
+
+                st.metric(
+                    "Symbol",
+                    "SBIN"
+                )
+
+            with col3:
+
+                st.metric(
+                    "Interval",
+                    "5 Minute"
+                )
+
+            with col4:
+
+                st.metric(
+                    "Exchange",
+                    "NSE"
+                )
+
+
+            # =================================================
+            # DATE RANGE
+            # =================================================
+
+            if "Datetime" in df.columns:
+
+                st.info(
+                    f"📅 **Data range:** "
+                    f"{df['Datetime'].min()} "
+                    f"→ "
+                    f"{df['Datetime'].max()}"
+                )
+
+
+            # =================================================
+            # COLUMNS
+            # =================================================
+
+            st.subheader(
+                "📋 Columns"
             )
-
-
-        with col3:
-
-            st.metric(
-                "Interval",
-                "5 Minute"
-            )
-
-
-        with col4:
-
-            st.metric(
-                "Exchange",
-                "NSE"
-            )
-
-
-        # ====================================================
-        # COLUMN INFORMATION
-        # ====================================================
-
-        st.subheader("📋 Columns")
-
-        st.write(
-            list(df.columns)
-        )
-
-
-        # ====================================================
-        # DATE RANGE
-        # ====================================================
-
-        if "Datetime" in df.columns:
-
-            min_date = df["Datetime"].min()
-
-            max_date = df["Datetime"].max()
-
-            st.info(
-                f"📅 **Data range:** "
-                f"{min_date} → {max_date}"
-            )
-
-
-        # ====================================================
-        # DATA TYPES
-        # ====================================================
-
-        with st.expander("🔎 Data Information"):
 
             st.write(
-                df.dtypes
+                list(df.columns)
             )
 
 
-        # ====================================================
-        # FIRST 10
-        # ====================================================
+            # =================================================
+            # FIRST 10
+            # =================================================
 
-        st.subheader(
-            "🔼 First 10 Candles"
-        )
-
-        st.dataframe(
-            df.head(10),
-            use_container_width=True
-        )
-
-
-        # ====================================================
-        # LAST 10
-        # ====================================================
-
-        st.subheader(
-            "🔽 Last 10 Candles"
-        )
-
-        st.dataframe(
-            df.tail(10),
-            use_container_width=True
-        )
-
-
-        # ====================================================
-        # FULL DATA
-        # ====================================================
-
-        with st.expander(
-            f"📊 Show All {len(df)} Candles"
-        ):
+            st.subheader(
+                "🔼 First 10 Candles"
+            )
 
             st.dataframe(
-                df,
-                use_container_width=True,
-                height=600
+                df.head(10),
+                use_container_width=True
             )
 
 
-        # ====================================================
-        # DOWNLOAD CSV
-        # ====================================================
+            # =================================================
+            # LAST 10
+            # =================================================
 
-        csv = df.to_csv(
-            index=False
-        )
+            st.subheader(
+                "🔽 Last 10 Candles"
+            )
 
-
-        st.download_button(
-            label="⬇️ Download SBIN 5-Minute CSV",
-            data=csv,
-            file_name="SBIN_5minute.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+            st.dataframe(
+                df.tail(10),
+                use_container_width=True
+            )
 
 
-    # ========================================================
-    # ERROR
-    # ========================================================
+            # =================================================
+            # FULL DATA
+            # =================================================
+
+            with st.expander(
+                f"📊 Show All {len(df)} Candles"
+            ):
+
+                st.dataframe(
+                    df,
+                    use_container_width=True,
+                    height=600
+                )
+
+
+            # =================================================
+            # DOWNLOAD
+            # =================================================
+
+            csv = df.to_csv(
+                index=False
+            )
+
+            st.download_button(
+                label="⬇️ Download SBIN 5-Minute CSV",
+                data=csv,
+                file_name="SBIN_5minute.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
 
     except Exception as e:
 
