@@ -20,7 +20,7 @@ st.set_page_config(
 # NIFTY STOCKS
 # ============================================================
 
-symbol = [
+NIFTY_SYMBOLS = [
     "ADANIENT",
     "ADANIPORTS",
     "APOLLOHOSP",
@@ -273,7 +273,7 @@ def fetch_one_stock(
         try:
 
             raw = tv.get_hist(
-                symbol=symbol,
+                symbol=NIFTY_SYMBOLS,
                 exchange="NSE",
                 interval=Interval.in_5_minute,
                 n_bars=n_bars,
