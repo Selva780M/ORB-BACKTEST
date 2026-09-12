@@ -7,6 +7,23 @@ import pandas as pd
 import streamlit as st
 
 
+tv = TvDatafeed(
+    username=os.getenv("TV_USERNAME"),
+    password=os.getenv("TV_PASSWORD"),
+)
+
+df = tv.get_hist(
+    symbol="APOLLOHOSP",
+    exchange="NSE",
+    interval=Interval.in_5_minute,
+    n_bars=100,
+    fut_contract=None,
+    extended_session=False,
+)
+
+st.write(df)
+
+
 st.set_page_config(
     page_title="TradingView ORB Backtest",
     page_icon="📈",
