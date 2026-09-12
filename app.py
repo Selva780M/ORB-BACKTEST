@@ -52,12 +52,12 @@ def get_secret(name):
 def create_tv_connection():
 
     token = get_secret("TV_TOKEN")
-    st.print(token)
+    st.write(token)
 
     username = get_secret(
         "TV_USERNAME"
     )
-    st.print(username)
+    st.write(username)
     
     password = get_secret(
         "TV_PASSWORD"
