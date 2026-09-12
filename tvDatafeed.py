@@ -1201,7 +1201,8 @@ class TvDatafeed:
                 if not raw:
 
                     continue
-
+                    
+                logger.info("TV RAW MESSAGE: %s", raw[:1000])
 
                 # ------------------------------------------------
                 # Debug
