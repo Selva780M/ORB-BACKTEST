@@ -23,9 +23,7 @@ st.set_page_config(
 # ============================================================
 
 NIFTY_SYMBOLS = [
-    "ADANIENT",
-    "ADANIPORTS",
-    "APOLLOHOSP",
+    "SBIN",
 ]
 
 
