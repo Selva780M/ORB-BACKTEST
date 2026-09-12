@@ -1,166 +1,203 @@
-import os
+# ============================================================
+# STREAMLIT TEST
+# ============================================================
+
 import streamlit as st
 
-from tvDatafeed import TvDatafeed, Interval
 
+st.set_page_config(
+    page_title="TradingView Test",
+    page_icon="📈",
+    layout="wide"
+)
+
+
+st.title("📈 TradingView Historical Data Test")
+
+st.write(
+    "Testing NSE cash symbol: **SBIN**"
+)
+
+
+# ============================================================
+# CREATE TV OBJECT
+# ============================================================
 
 @st.cache_resource
-def create_tv_connection():
+def get_tv():
 
-    token = st.secrets.get(
-        "TV_TOKEN",
-        None
-    )
-
-    username = st.secrets.get(
-        "TV_USERNAME",
-        None
-    )
-
-    password = st.secrets.get(
-        "TV_PASSWORD",
-        None
-    )
-
-    # Environment fallback
-    if not token:
-        token = os.getenv("TV_TOKEN")
-
-    if not username:
-        username = os.getenv("TV_USERNAME")
-
-    if not password:
-        password = os.getenv("TV_PASSWORD")
-
-    # --------------------------------------------------------
-    # TOKEN
-    # --------------------------------------------------------
-
-    if token:
-
-        return TvDatafeed(
-            token=token
-        )
-
-    # --------------------------------------------------------
-    # USERNAME + PASSWORD
-    # --------------------------------------------------------
-
-    if username and password:
-
-        return TvDatafeed(
-            username=username,
-            password=password
-        )
-
-    raise RuntimeError(
-        "TradingView credentials not found"
-    )
+    return TvDatafeed()
 
 
+tv = get_tv()
 
 
-st.title("📈 TradingView Test")
+# ============================================================
+# FETCH BUTTON
+# ============================================================
 
-symbol = st.sidebar.text_input(
-    "Symbol",
-    "SBIN"
-).strip().upper()
-
-exchange = st.sidebar.text_input(
-    "Exchange",
-    "NSE"
-).strip().upper()
-
-interval_text = st.sidebar.selectbox(
-    "Interval",
-    [
-        "1",
-        "3",
-        "5",
-        "15",
-        "30",
-        "1H",
-        "1D"
-    ],
-    index=2
-)
-
-n_bars = st.sidebar.number_input(
-    "No of Bars",
-    min_value=1,
-    max_value=5000,
-    value=100
-)
-
-
-if st.sidebar.button(
-    "🚀 Fetch Data",
+if st.button(
+    "🚀 Fetch SBIN 5-Minute Data",
     type="primary"
 ):
 
-    try:
+    with st.spinner(
+        "Connecting to TradingView..."
+    ):
 
-        tv = create_tv_connection()
+        try:
 
-        st.info(
-            f"Requesting {exchange}:{symbol}"
-        )
+            # ------------------------------------------------
+            # NSE CASH TEST
+            # ------------------------------------------------
 
-        data = tv.get_hist(
+            df = tv.get_hist(
+                symbol="SBIN",
+                exchange="NSE",
+                interval=Interval.in_5_minute,
+                n_bars=500
+            )
 
-            symbol=symbol,
+            # ------------------------------------------------
+            # RESULT
+            # ------------------------------------------------
 
-            exchange=exchange,
+            if df is None or df.empty:
 
-            interval=Interval(
-                interval_text
-            ),
+                st.error(
+                    "❌ NO DATA"
+                )
 
-            n_bars=int(n_bars),
+                st.warning(
+                    "TradingView did not return candle data."
+                )
 
-            # CASH STOCK
-            fut_contract=None,
+            else:
 
-            extended_session=False
-        )
+                st.success(
+                    f"✅ Data received successfully — {len(df)} candles"
+                )
 
-        if data is None or data.empty:
+                # ------------------------------------------------
+                # INFO
+                # ------------------------------------------------
+
+                col1, col2, col3, col4 = st.columns(4)
+
+                with col1:
+
+                    st.metric(
+                        "Rows",
+                        len(df)
+                    )
+
+                with col2:
+
+                    st.metric(
+                        "Symbol",
+                        "SBIN"
+                    )
+
+                with col3:
+
+                    st.metric(
+                        "Interval",
+                        "5 Minute"
+                    )
+
+                with col4:
+
+                    st.metric(
+                        "Exchange",
+                        "NSE"
+                    )
+
+                # ------------------------------------------------
+                # DATE RANGE
+                # ------------------------------------------------
+
+                if "Datetime" in df.columns:
+
+                    min_date = df["Datetime"].min()
+
+                    max_date = df["Datetime"].max()
+
+                    st.info(
+                        f"📅 Data range: "
+                        f"{min_date} → {max_date}"
+                    )
+
+                # ------------------------------------------------
+                # COLUMN CHECK
+                # ------------------------------------------------
+
+                st.subheader(
+                    "📋 Columns"
+                )
+
+                st.write(
+                    list(df.columns)
+                )
+
+                # ------------------------------------------------
+                # FIRST 10
+                # ------------------------------------------------
+
+                st.subheader(
+                    "🔼 First 10 Candles"
+                )
+
+                st.dataframe(
+                    df.head(10),
+                    use_container_width=True
+                )
+
+                # ------------------------------------------------
+                # LAST 10
+                # ------------------------------------------------
+
+                st.subheader(
+                    "🔽 Last 10 Candles"
+                )
+
+                st.dataframe(
+                    df.tail(10),
+                    use_container_width=True
+                )
+
+                # ------------------------------------------------
+                # FULL DATA
+                # ------------------------------------------------
+
+                with st.expander(
+                    "📊 Show Full 500 Candles"
+                ):
+
+                    st.dataframe(
+                        df,
+                        use_container_width=True,
+                        height=600
+                    )
+
+                # ------------------------------------------------
+                # DOWNLOAD
+                # ------------------------------------------------
+
+                csv = df.to_csv(
+                    index=False
+                )
+
+                st.download_button(
+                    label="⬇️ Download CSV",
+                    data=csv,
+                    file_name="SBIN_5minute.csv",
+                    mime="text/csv"
+                )
+
+        except Exception as e:
 
             st.error(
-                f"❌ No data returned for "
-                f"{exchange}:{symbol}"
+                "❌ TradingView Error"
             )
 
-        else:
-
-            st.success(
-                f"✅ Received {len(data)} candles"
-            )
-
-            st.write(
-                "Columns:",
-                list(data.columns)
-            )
-
-            st.dataframe(
-                data,
-                use_container_width=True,
-                height=500
-            )
-
-            st.write(
-                "Latest candle:"
-            )
-
-            st.write(
-                data.iloc[-1]
-            )
-
-    except Exception as e:
-
-        st.error(
-            "TradingView error"
-        )
-
-        st.exception(e)
+            st.exception(e)
