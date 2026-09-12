@@ -1,12 +1,10 @@
 
-
 import os
 import time as pytime
 from datetime import time
 import numpy as np
 import pandas as pd
 import streamlit as st
-from tvDatafeed import TvDatafeed, Interval
 
 
 st.set_page_config(
@@ -266,21 +264,23 @@ def fetch_one_stock(
 
     last_error = None
 
-    for attempt in range(
-        retries + 1
-    ):
+    for attempt in range(retries + 1):
 
-         try:
-                raw = tv.get_hist(
-                symbol=symbol,                
+        try:
+
+            raw = tv.get_hist(
+                symbol=symbol,
                 exchange="NSE",
                 interval=Interval.in_5_minute,
                 n_bars=n_bars,
-                fut_contract=0,
+                fut_contract=None,
                 extended_session=False,
             )
 
-            df = normalize_tv_data(raw,symbol)
+            df = normalize_tv_data(
+                raw,
+                symbol
+            )
 
             if (
                 df is None
@@ -296,6 +296,13 @@ def fetch_one_stock(
         except Exception as e:
 
             last_error = e
+
+            logging.error(
+                "%s attempt %s failed: %s",
+                symbol,
+                attempt + 1,
+                e
+            )
 
             if attempt < retries:
 
