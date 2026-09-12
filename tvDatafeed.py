@@ -832,11 +832,9 @@ class TvDatafeed:
             )
 
             symbol_payload = (
-                '{"symbol":"'
+                '={"symbol":"'
                 + formatted_symbol
-                + '",'
-                '"adjustment":"splits",'
-                '"session":"'
+                + '","adjustment":"splits","session":"'
                 + session_type
                 + '"}'
             )
