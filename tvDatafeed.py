@@ -676,38 +676,6 @@ class TvDatafeed:
             ]
         )
 
-        # ====================================================
-        # SYMBOL SESSION
-        # ====================================================
-
-        session_type = (
-            "extended"
-            if extended_session
-            else "regular"
-        )
-
-        symbol_payload = (
-            '={"symbol":"'
-            + symbol
-            + '","adjustment":"splits","session":"'
-            + session_type
-            + '"}'
-        )
-
-        logging.info(
-            "Resolving symbol: %s",
-            symbol
-        )
-
-        self.__send_message(
-            "resolve_symbol",
-            [
-                self.chart_session,
-                "symbol_1",
-                symbol_payload
-            ]
-        )
-
         # ============================================================
         # RESOLVE SYMBOL 
         # ============================================================ 
