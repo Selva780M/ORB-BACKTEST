@@ -1017,7 +1017,7 @@ class TvDatafeed:
                 fut_contract
             )
         )
-        st.write(symbol)
+        print(symbol)
 
         # ----------------------------------------------------
         # Resolution
