@@ -686,10 +686,6 @@ class TvDatafeed:
     # GET HISTORICAL DATA
     # ========================================================
 
-    # ========================================================
-    # GET HISTORICAL DATA
-    # ========================================================
-
     def get_hist(
         self,
         symbol,
@@ -698,6 +694,61 @@ class TvDatafeed:
         n_bars=500,
         extended_session=False
     ):
+
+        # ----------------------------------------------------
+        # Convert interval FIRST
+        # ----------------------------------------------------
+
+        if isinstance(interval, Interval):
+            interval_value = interval.value
+        else:
+            interval_value = str(interval)
+
+        # Make absolutely sure it is a string
+        interval_value = str(interval_value)
+
+        logging.info(
+            "INPUT interval     = %r",
+            interval
+        )
+
+        logging.info(
+            "TV interval_value  = %r",
+            interval_value
+        )
+
+        # ----------------------------------------------------
+        # Validate interval
+        # ----------------------------------------------------
+
+        valid_intervals = {
+            "1",
+            "3",
+            "5",
+            "15",
+            "30",
+            "45",
+            "1H",
+            "2H",
+            "3H",
+            "4H",
+            "1D",
+            "1W",
+            "1M"
+        }
+
+        if interval_value not in valid_intervals:
+
+            raise ValueError(
+                f"Invalid TradingView interval: "
+                f"{interval_value!r}"
+            )
+
+        # ----------------------------------------------------
+        # Validate bars
+        # ----------------------------------------------------
+
+        n_bars = int(n_bars)
 
         # ----------------------------------------------------
         # Create websocket connection
@@ -726,23 +777,6 @@ class TvDatafeed:
         )
 
         # ----------------------------------------------------
-        # Convert Interval enum
-        # ----------------------------------------------------
-
-        if isinstance(interval, Interval):
-
-            interval_value = interval.value
-
-        else:
-
-            interval_value = str(interval)
-
-        logging.info(
-            "TradingView interval: %s",
-            interval_value
-        )
-
-        # ----------------------------------------------------
         # Create chart session
         # ----------------------------------------------------
 
@@ -760,7 +794,7 @@ class TvDatafeed:
         )
 
         # ----------------------------------------------------
-        # Set authentication token
+        # Authentication
         # ----------------------------------------------------
 
         self.__send_message(
@@ -772,9 +806,6 @@ class TvDatafeed:
 
         # ----------------------------------------------------
         # Resolve symbol
-        #
-        # IMPORTANT:
-        # Keep the "=" before {"symbol":
         # ----------------------------------------------------
 
         session_type = (
@@ -801,8 +832,13 @@ class TvDatafeed:
         )
 
         # ----------------------------------------------------
-        # Create series
+        # CREATE SERIES
         # ----------------------------------------------------
+
+        logging.info(
+            "CREATE SERIES interval = %r",
+            interval_value
+        )
 
         self.__send_message(
             "create_series",
@@ -829,7 +865,7 @@ class TvDatafeed:
         )
 
         # ----------------------------------------------------
-        # Receive data
+        # Receive TradingView response
         # ----------------------------------------------------
 
         raw_data = ""
@@ -852,7 +888,7 @@ class TvDatafeed:
                     )
 
                 # --------------------------------------------
-                # Completed
+                # Series completed
                 # --------------------------------------------
 
                 if "series_completed" in result:
@@ -867,13 +903,26 @@ class TvDatafeed:
                     break
 
                 # --------------------------------------------
+                # Critical error
+                # --------------------------------------------
+
+                if "critical_error" in result:
+
+                    logging.error(
+                        "TradingView response: %s",
+                        result
+                    )
+
+                    break
+
+                # --------------------------------------------
                 # Symbol error
                 # --------------------------------------------
 
                 if "symbol_error" in result:
 
                     logging.error(
-                        "TradingView symbol error: %s",
+                        "TradingView response: %s",
                         result
                     )
 
@@ -886,20 +935,7 @@ class TvDatafeed:
                 if "series_error" in result:
 
                     logging.error(
-                        "TradingView series error: %s",
-                        result
-                    )
-
-                    break
-
-                # --------------------------------------------
-                # Critical error
-                # --------------------------------------------
-
-                if "critical_error" in result:
-
-                    logging.error(
-                        "TradingView critical error: %s",
+                        "TradingView response: %s",
                         result
                     )
 
@@ -995,7 +1031,7 @@ class TvDatafeed:
         )
 
         # ----------------------------------------------------
-        # Reset index
+        # Reset
         # ----------------------------------------------------
 
         df = df.reset_index(
@@ -1009,7 +1045,7 @@ class TvDatafeed:
         )
 
         return df
-    # ========================================================
+        # ========================================================
     # SEARCH SYMBOL
     # ========================================================
 
