@@ -345,7 +345,7 @@ def fetch_one_stock(
             raw = tv.get_hist(
                 symbol=symbol,
                 exchange="NSE",
-                interval="5", #str(Interval.in_5_minute),
+                interval=str(5), #str(Interval.in_5_minute),
                 n_bars=int(n_bars),
                 extended_session=False,
             )
