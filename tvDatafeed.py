@@ -671,319 +671,331 @@ class TvDatafeed:
     # GET HIST
     # ========================================================
 
-    def get_hist(
-        self,
-        symbol,
-        exchange="NSE",
-        interval=Interval.in_daily,
-        n_bars=10,
-        fut_contract=None,
-        extended_session=False,
-    ):
-
-        symbol = self._format_symbol(
+        def get_hist(
+            self,
             symbol,
-            exchange,
-            fut_contract
-        )
-
-        interval_value = self._interval_value(
-            interval
-        )
-
-        logger.info(
-            "GET HIST: %s | %s | %s | bars=%s | auth=%s",
-            symbol,
-            exchange,
-            interval_value,
-            n_bars,
-            self.auth_method
-        )
-
-        self._create_connection()
-
-        bars = []
-
-        try:
-
-            # ------------------------------------------------
-            # AUTH
-            # ------------------------------------------------
-
-            self._send_message(
-                "set_auth_token",
-                [self.token]
+            exchange="NSE",
+            interval=Interval.in_daily,
+            n_bars=10,
+            fut_contract=None,
+            extended_session=False,
+        ):
+        
+            symbol = self._format_symbol(
+                symbol,
+                exchange,
+                fut_contract
             )
-
-            # ------------------------------------------------
-            # CHART SESSION
-            # ------------------------------------------------
-
-            self._send_message(
-                "chart_create_session",
-                [
-                    self.chart_session,
-                    ""
-                ]
+        
+            interval_value = self._interval_value(interval)
+        
+            logger.info(
+                "GET HIST: %s | TF=%s | BARS=%s | AUTH=%s",
+                symbol,
+                interval_value,
+                n_bars,
+                self.auth_method,
             )
-
-            # ------------------------------------------------
-            # QUOTE SESSION
-            # ------------------------------------------------
-
-            self._send_message(
-                "quote_create_session",
-                [
-                    self.session,
-                    "x"
-                ]
-            )
-
-            # ------------------------------------------------
-            # QUOTE FIELDS
-            # ------------------------------------------------
-
-            fields = [
-                "ch",
-                "chp",
-                "current_session",
-                "description",
-                "local_description",
-                "language",
-                "exchange",
-                "fractional",
-                "is_tradable",
-                "lp",
-                "lp_time",
-                "minmov",
-                "minmove2",
-                "original_name",
-                "pricescale",
-                "pro_name",
-                "short_name",
-                "type",
-                "update_mode",
-                "volume",
-                "currency_code",
-                "rchp",
-                "rtc",
-            ]
-
-            self._send_message(
-                "quote_set_fields",
-                [
-                    self.session,
-                    *fields
-                ]
-            )
-
-            # ------------------------------------------------
-            # QUOTE SYMBOL
-            # ------------------------------------------------
-
-            self._send_message(
-                "quote_add_symbols",
-                [
-                    self.session,
-                    symbol,
-                    {
-                        "flags": [
-                            "force_permission"
-                        ]
-                    }
-                ]
-            )
-
-            self._send_message(
-                "quote_fast_symbols",
-                [
-                    self.session,
-                    symbol
-                ]
-            )
-
-            # ------------------------------------------------
-            # RESOLVE SYMBOL
-            # ------------------------------------------------
-
-            session_type = (
-                "extended"
-                if extended_session
-                else "regular"
-            )
-
-            symbol_payload = json.dumps({
-                "symbol": symbol,
-                "adjustment": "splits",
-                "session": session_type,
-            })
-
-            self._send_message(
-                "resolve_symbol",
-                [
-                    self.chart_session,
-                    "symbol_1",
-                    "=" + symbol_payload,
-                ]
-            )
-
-            # ------------------------------------------------
-            # CREATE SERIES
-            # ------------------------------------------------
-
-            self._send_message(
-                "create_series",
-                [
-                    self.chart_session,
-                    "s1",
-                    "s1",
-                    "symbol_1",
-                    interval_value,
-                    int(n_bars),
-                ]
-            )
-
-            # ------------------------------------------------
-            # TIMEZONE
-            # ------------------------------------------------
-
-            self._send_message(
-                "switch_timezone",
-                [
-                    self.chart_session,
-                    "exchange"
-                ]
-            )
-
-            # ------------------------------------------------
-            # RECEIVE
-            # ------------------------------------------------
-
-            start_time = time.time()
-
-            completed = False
-
-            while (
-                time.time() - start_time
-                < self.WS_TIMEOUT
-            ):
-
-                try:
-
-                    raw = self.ws.recv()
-
-                except Exception as e:
-
-                    logger.warning(
-                        "WebSocket receive error: %s",
-                        e
-                    )
-
-                    break
-
-                if not raw:
-                    continue
-
-                if self.ws_debug:
-
-                    logger.info(
-                        "RECV: %s",
-                        raw[:1000]
-                    )
-
-                # Heartbeat
-                if "~m~~h~" in raw:
-
-                    self._handle_heartbeat(
-                        raw
-                    )
-
-                messages = (
-                    self._extract_messages(
-                        raw
-                    )
+        
+            self._create_connection()
+        
+            bars = []
+        
+            try:
+        
+                # ====================================================
+                # AUTH
+                # ====================================================
+        
+                self._send_message(
+                    "set_auth_token",
+                    [self.token]
                 )
-
-                for message in messages:
-
+        
+                # ====================================================
+                # CHART SESSION
+                # ====================================================
+        
+                self._send_message(
+                    "chart_create_session",
+                    [
+                        self.chart_session,
+                        ""
+                    ]
+                )
+        
+                # ====================================================
+                # RESOLVE SYMBOL
+                # ====================================================
+        
+                session_type = (
+                    "extended"
+                    if extended_session
+                    else "regular"
+                )
+        
+                symbol_payload = json.dumps({
+                    "symbol": symbol,
+                    "adjustment": "splits",
+                    "session": session_type,
+                })
+        
+                self._send_message(
+                    "resolve_symbol",
+                    [
+                        self.chart_session,
+                        "symbol_1",
+                        "=" + symbol_payload,
+                    ]
+                )
+        
+                # ====================================================
+                # CREATE SERIES
+                # ====================================================
+        
+                self._send_message(
+                    "create_series",
+                    [
+                        self.chart_session,
+                        "s1",
+                        "s1",
+                        "symbol_1",
+                        interval_value,
+                        int(n_bars),
+                    ]
+                )
+        
+                # ====================================================
+                # TIMEZONE
+                # ====================================================
+        
+                self._send_message(
+                    "switch_timezone",
+                    [
+                        self.chart_session,
+                        "exchange"
+                    ]
+                )
+        
+                # ====================================================
+                # RECEIVE DATA
+                # ====================================================
+        
+                start_time = time.time()
+                completed = False
+        
+                while time.time() - start_time < self.WS_TIMEOUT:
+        
                     try:
-
-                        obj = json.loads(
-                            message
+                        raw = self.ws.recv()
+        
+                    except Exception as e:
+        
+                        logger.warning(
+                            "WebSocket receive error: %s",
+                            e
                         )
-
-                    except Exception:
-
+        
+                        break
+        
+                    if not raw:
                         continue
-
-                    method = obj.get("m")
-
-                    # ----------------------------------------
-                    # ERROR
-                    # ----------------------------------------
-
-                    if method == "symbol_error":
-
-                        params = obj.get(
-                            "p",
-                            []
+        
+                    if self.ws_debug:
+                        logger.info(
+                            "RECV: %s",
+                            raw[:2000]
                         )
-
-                        reason = (
-                            params[2]
-                            if len(params) > 2
-                            else "Unknown symbol error"
-                        )
-
-                        raise RuntimeError(
-                            f"TradingView symbol error: "
-                            f"{reason} | {symbol}"
-                        )
-
-                    if method == "series_error":
-
-                        raise RuntimeError(
-                            f"TradingView series error: "
-                            f"{obj.get('p')}"
-                        )
-
-                    if method == "critical_error":
-
-                        raise RuntimeError(
-                            f"TradingView critical error: "
-                            f"{obj.get('p')}"
-                        )
-
-                    # ----------------------------------------
-                    # DATA
-                    # ----------------------------------------
-
-                    if method == "du":
-
-                        self._parse_du(
-                            obj,
-                            bars
-                        )
-
-                    elif method == "timescale_update":
-
-                        self._parse_timescale_update(
-                            obj,
-                            bars
-                        )
-
-                    # ----------------------------------------
-                    # COMPLETE
-                    # ----------------------------------------
-
-                    elif method == "series_completed":
-
-                        completed = True
-
-                if completed and bars:
-
-                    break
-
+        
+                    # ------------------------------------------------
+                    # HEARTBEAT
+                    # ------------------------------------------------
+        
+                    if "~m~~h~" in raw:
+        
+                        try:
+                            self.ws.send(raw)
+                        except Exception:
+                            pass
+        
+                    # ------------------------------------------------
+                    # EXTRACT TV MESSAGES
+                    # ------------------------------------------------
+        
+                    messages = self._extract_messages(raw)
+        
+                    for message in messages:
+        
+                        try:
+        
+                            obj = json.loads(message)
+        
+                        except Exception:
+        
+                            continue
+        
+                        method = obj.get("m")
+        
+                        # --------------------------------------------
+                        # SYMBOL ERROR
+                        # --------------------------------------------
+        
+                        if method == "symbol_error":
+        
+                            params = obj.get("p", [])
+        
+                            reason = (
+                                params[2]
+                                if len(params) > 2
+                                else "Unknown symbol error"
+                            )
+        
+                            raise RuntimeError(
+                                f"TradingView symbol error: "
+                                f"{reason} | {symbol}"
+                            )
+        
+                        # --------------------------------------------
+                        # SERIES ERROR
+                        # --------------------------------------------
+        
+                        if method == "series_error":
+        
+                            raise RuntimeError(
+                                f"TradingView series error: "
+                                f"{obj.get('p')}"
+                            )
+        
+                        # --------------------------------------------
+                        # CRITICAL ERROR
+                        # --------------------------------------------
+        
+                        if method == "critical_error":
+        
+                            raise RuntimeError(
+                                f"TradingView critical error: "
+                                f"{obj.get('p')}"
+                            )
+        
+                        # --------------------------------------------
+                        # DATA
+                        # --------------------------------------------
+        
+                        if method == "du":
+        
+                            self._parse_du(
+                                obj,
+                                bars
+                            )
+        
+                        elif method == "timescale_update":
+        
+                            self._parse_timescale_update(
+                                obj,
+                                bars
+                            )
+        
+                        # --------------------------------------------
+                        # COMPLETE
+                        # --------------------------------------------
+        
+                        elif method == "series_completed":
+        
+                            completed = True
+        
+                    # ------------------------------------------------
+                    # STOP
+                    # ------------------------------------------------
+        
+                    if completed and bars:
+                        break
+        
+                # ====================================================
+                # NO DATA
+                # ====================================================
+        
+                if not bars:
+        
+                    logger.warning(
+                        "No bars received for %s",
+                        symbol
+                    )
+        
+                    return pd.DataFrame(
+                        columns=[
+                            "Datetime",
+                            "Open",
+                            "High",
+                            "Low",
+                            "Close",
+                            "Volume",
+                            "symbol",
+                        ]
+                    )
+        
+                # ====================================================
+                # DATAFRAME
+                # ====================================================
+        
+                df = pd.DataFrame(bars)
+        
+                # Remove duplicates
+                df = (
+                    df.drop_duplicates(
+                        subset=["Datetime"]
+                    )
+                    .sort_values("Datetime")
+                    .reset_index(drop=True)
+                )
+        
+                # ====================================================
+                # TIMEZONE
+                # ====================================================
+        
+                india = pytz.timezone(
+                    "Asia/Kolkata"
+                )
+        
+                if df["Datetime"].dt.tz is None:
+        
+                    df["Datetime"] = (
+                        df["Datetime"]
+                        .dt.tz_localize("UTC")
+                    )
+        
+                df["Datetime"] = (
+                    df["Datetime"]
+                    .dt.tz_convert(india)
+                    .dt.tz_localize(None)
+                )
+        
+                # ====================================================
+                # SYMBOL
+                # ====================================================
+        
+                df.insert(
+                    0,
+                    "symbol",
+                    symbol
+                )
+        
+                logger.info(
+                    "SUCCESS: %s candles received for %s",
+                    len(df),
+                    symbol
+                )
+        
+                return df
+        
+            finally:
+        
+                try:
+                    self.ws.close()
+                except Exception:
+                    pass
+        
+                self.ws = None
+        
             # ------------------------------------------------
             # BUILD DF
             # ------------------------------------------------
