@@ -1,3 +1,8 @@
+# ============================================================
+# TRADINGVIEW 5-MIN ORB BACKTEST
+# Direct TradingView Fetch - NO INPUT CSV
+# ============================================================
+
 import os
 import time as pytime
 from datetime import time
@@ -8,7 +13,25 @@ import streamlit as st
 
 
 # ============================================================
-# PAGE CONFIG
+# TVDATAFEED IMPORT
+# ============================================================
+#
+# OPTION 1:
+# If your TvDatafeed and Interval classes are in tvDatafeed.py:
+#
+# from tvDatafeed import TvDatafeed, Interval
+#
+# OPTION 2:
+# If you already pasted your custom TvDatafeed class above,
+# keep that class above this section.
+#
+# ============================================================
+
+from tvDatafeed import TvDatafeed, Interval
+
+
+# ============================================================
+# PAGE
 # ============================================================
 
 st.set_page_config(
@@ -19,22 +42,7 @@ st.set_page_config(
 
 
 # ============================================================
-# IMPORTANT
-# ============================================================
-#
-# Your TvDatafeed and Interval classes must already exist.
-#
-# Example:
-#
-# from tvDatafeed import TvDatafeed, Interval
-#
-# OR keep your custom TvDatafeed class above this code.
-#
-# ============================================================
-
-
-# ============================================================
-# NIFTY STOCK LIST
+# NIFTY STOCKS
 # ============================================================
 
 NIFTY_SYMBOLS = [
@@ -93,7 +101,7 @@ NIFTY_SYMBOLS = [
 
 
 # ============================================================
-# SECRETS / LOGIN
+# SECRETS
 # ============================================================
 
 def get_secret(name):
@@ -109,109 +117,126 @@ def get_secret(name):
         return None
 
 
+# ============================================================
+# TRADINGVIEW CONNECTION
+# ============================================================
+
 def create_tv_connection():
 
-    tv_token = get_secret("TV_TOKEN")
-    tv_username = get_secret("TV_USERNAME")
-    tv_password = get_secret("TV_PASSWORD")
+    token = get_secret("TV_TOKEN")
 
-    try:
+    username = get_secret(
+        "TV_USERNAME"
+    )
 
-        # Token login
-        if tv_token:
+    password = get_secret(
+        "TV_PASSWORD"
+    )
 
-            st.info("🔐 Connecting to TradingView using token...")
+    # --------------------------------------------------------
+    # TOKEN LOGIN
+    # --------------------------------------------------------
 
-            # IMPORTANT:
-            # Pass token during construction.
-            # Do NOT do tv.token = token after creating object.
-            tv = TvDatafeed(
-                token=tv_token
-            )
+    if token:
 
-            return tv
-
-        # Username/password login
-        if tv_username and tv_password:
-
-            st.info("🔐 Connecting to TradingView using username/password...")
-
-            tv = TvDatafeed(
-                username=tv_username,
-                password=tv_password
-            )
-
-            return tv
-
-        raise RuntimeError(
-            "TradingView credentials not found. "
-            "Set TV_TOKEN or TV_USERNAME + TV_PASSWORD."
+        return TvDatafeed(
+            token=token
         )
 
-    except Exception as e:
+    # --------------------------------------------------------
+    # USERNAME / PASSWORD
+    # --------------------------------------------------------
 
-        raise RuntimeError(
-            f"TradingView connection failed: {e}"
+    if username and password:
+
+        return TvDatafeed(
+            username=username,
+            password=password
         )
+
+    raise RuntimeError(
+        "TradingView credentials not found.\n\n"
+        "Set TV_TOKEN or TV_USERNAME + TV_PASSWORD."
+    )
 
 
 # ============================================================
 # NORMALIZE TRADINGVIEW DATA
 # ============================================================
 
-def normalize_tv_data(df, symbol):
+def normalize_tv_data(
+    df,
+    symbol
+):
 
     if df is None:
+
         return None
 
     if df.empty:
+
         return None
 
     df = df.copy()
 
     # --------------------------------------------------------
-    # Reset index
+    # RESET INDEX
     # --------------------------------------------------------
 
-    if isinstance(df.index, pd.DatetimeIndex):
+    if isinstance(
+        df.index,
+        pd.DatetimeIndex
+    ):
 
         df = df.reset_index()
 
     # --------------------------------------------------------
-    # Rename columns
+    # RENAME
     # --------------------------------------------------------
 
     rename_map = {}
 
     for col in df.columns:
 
-        c = str(col).strip().lower()
+        c = str(
+            col
+        ).strip().lower()
 
-        if c in ["datetime", "date", "time", "index"]:
+        if c in [
+            "datetime",
+            "date",
+            "time",
+            "index"
+        ]:
+
             rename_map[col] = "datetime"
 
         elif c == "open":
+
             rename_map[col] = "open"
 
         elif c == "high":
+
             rename_map[col] = "high"
 
         elif c == "low":
+
             rename_map[col] = "low"
 
         elif c == "close":
+
             rename_map[col] = "close"
 
         elif c == "volume":
+
             rename_map[col] = "volume"
 
-        elif c == "symbol":
-            rename_map[col] = "symbol"
-
-    df = df.rename(columns=rename_map)
+    df = df.rename(
+        columns=rename_map
+    )
 
     # --------------------------------------------------------
-    # Check required columns
+    # REQUIRED
     # --------------------------------------------------------
 
     required = [
@@ -231,18 +256,39 @@ def normalize_tv_data(df, symbol):
     if missing:
 
         raise ValueError(
-            f"{symbol}: Missing columns {missing}. "
-            f"Available: {list(df.columns)}"
+            f"{symbol}: missing columns "
+            f"{missing}"
         )
 
     # --------------------------------------------------------
-    # Datetime
+    # DATETIME
     # --------------------------------------------------------
 
     df["datetime"] = pd.to_datetime(
         df["datetime"],
         errors="coerce"
     )
+
+    # --------------------------------------------------------
+    # NUMERIC
+    # --------------------------------------------------------
+
+    for col in [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+    ]:
+
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce"
+        )
+
+    # --------------------------------------------------------
+    # DROP BAD ROWS
+    # --------------------------------------------------------
 
     df = df.dropna(
         subset=[
@@ -255,52 +301,26 @@ def normalize_tv_data(df, symbol):
     )
 
     # --------------------------------------------------------
-    # Numeric columns
-    # --------------------------------------------------------
-
-    numeric_cols = [
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume"
-    ]
-
-    for col in numeric_cols:
-
-        df[col] = pd.to_numeric(
-            df[col],
-            errors="coerce"
-        )
-
-    df = df.dropna(
-        subset=[
-            "open",
-            "high",
-            "low",
-            "close"
-        ]
-    )
-
-    # --------------------------------------------------------
-    # Symbol
+    # SYMBOL
     # --------------------------------------------------------
 
     df["symbol"] = symbol
 
     # --------------------------------------------------------
-    # Sort
+    # SORT
     # --------------------------------------------------------
 
-    df = df.sort_values(
-        "datetime"
-    ).reset_index(drop=True)
+    df = (
+        df
+        .sort_values(
+            "datetime"
+        )
+        .reset_index(
+            drop=True
+        )
+    )
 
-    # --------------------------------------------------------
-    # Required order
-    # --------------------------------------------------------
-
-    df = df[
+    return df[
         [
             "datetime",
             "open",
@@ -311,8 +331,6 @@ def normalize_tv_data(df, symbol):
             "symbol",
         ]
     ]
-
-    return df
 
 
 # ============================================================
@@ -328,7 +346,9 @@ def fetch_one_stock(
 
     last_error = None
 
-    for attempt in range(retries + 1):
+    for attempt in range(
+        retries + 1
+    ):
 
         try:
 
@@ -341,24 +361,18 @@ def fetch_one_stock(
                 extended_session=False,
             )
 
-            if raw is None:
-                raise ValueError(
-                    "TradingView returned None"
-                )
-
-            if raw.empty:
-                raise ValueError(
-                    "TradingView returned empty data"
-                )
-
             df = normalize_tv_data(
                 raw,
                 symbol
             )
 
-            if df is None or df.empty:
+            if (
+                df is None
+                or df.empty
+            ):
+
                 raise ValueError(
-                    "No usable OHLC data"
+                    "No data returned"
                 )
 
             return df
@@ -383,8 +397,8 @@ def fetch_one_stock(
 def fetch_all_stocks(
     tv,
     symbols,
-    n_bars=5000,
-    delay=0.25
+    n_bars,
+    delay
 ):
 
     data = {}
@@ -392,18 +406,22 @@ def fetch_all_stocks(
     failed = []
 
     progress = st.progress(
-        0,
-        text="Starting TradingView download..."
+        0
     )
 
-    total = len(symbols)
+    status = st.empty()
 
-    status_box = st.empty()
+    total = len(
+        symbols
+    )
 
-    for i, symbol in enumerate(symbols):
+    for i, symbol in enumerate(
+        symbols
+    ):
 
-        status_box.info(
-            f"📡 Fetching {symbol} "
+        status.info(
+            f"📡 Fetching "
+            f"{symbol} "
             f"({i + 1}/{total})"
         )
 
@@ -416,9 +434,7 @@ def fetch_all_stocks(
                 retries=2
             )
 
-            if df is not None and not df.empty:
-
-                data[symbol] = df
+            data[symbol] = df
 
         except Exception as e:
 
@@ -430,23 +446,27 @@ def fetch_all_stocks(
             )
 
         progress.progress(
-            (i + 1) / total,
-            text=(
-                f"Fetched {i + 1}/{total} "
-                f"| Success: {len(data)} "
-                f"| Failed: {len(failed)}"
-            )
+            (i + 1) / total
         )
 
-        pytime.sleep(delay)
+        if delay > 0:
 
-    status_box.empty()
+            pytime.sleep(
+                delay
+            )
 
-    return data, failed
+    progress.empty()
+
+    status.empty()
+
+    return (
+        data,
+        failed
+    )
 
 
 # ============================================================
-# INDICATORS
+# RMA
 # ============================================================
 
 def rma(
@@ -465,12 +485,19 @@ def rma(
     )
 
 
+# ============================================================
+# ATR
+# ============================================================
+
 def atr(
     df,
     length=14
 ):
 
-    prev_close = df["close"].shift(1)
+    prev_close = (
+        df["close"]
+        .shift(1)
+    )
 
     tr1 = (
         df["high"]
@@ -494,13 +521,19 @@ def atr(
             tr3
         ],
         axis=1
-    ).max(axis=1)
+    ).max(
+        axis=1
+    )
 
     return rma(
         tr,
         length
     )
 
+
+# ============================================================
+# RSI
+# ============================================================
 
 def rsi(
     close,
@@ -527,23 +560,29 @@ def rsi(
         length
     )
 
-    rs = avg_gain / avg_loss.replace(
-        0,
-        np.nan
+    rs = (
+        avg_gain /
+        avg_loss.replace(
+            0,
+            np.nan
+        )
     )
 
-    result = (
+    return (
         100
-        - (
-            100
-            / (
+        -
+        (
+            100 /
+            (
                 1 + rs
             )
         )
     )
 
-    return result
 
+# ============================================================
+# ADX
+# ============================================================
 
 def adx(
     df,
@@ -551,23 +590,25 @@ def adx(
 ):
 
     high = df["high"]
+
     low = df["low"]
 
     up_move = (
-        high
-        - high.shift(1)
+        high -
+        high.shift(1)
     )
 
     down_move = (
-        low.shift(1)
-        - low
+        low.shift(1) -
+        low
     )
 
     plus_dm = pd.Series(
         np.where(
             (
                 (up_move > down_move)
-                & (up_move > 0)
+                &
+                (up_move > 0)
             ),
             up_move,
             0
@@ -579,7 +620,8 @@ def adx(
         np.where(
             (
                 (down_move > up_move)
-                & (down_move > 0)
+                &
+                (down_move > 0)
             ),
             down_move,
             0
@@ -587,16 +629,27 @@ def adx(
         index=df.index
     )
 
-    prev_close = df["close"].shift(1)
+    prev_close = (
+        df["close"]
+        .shift(1)
+    )
 
     tr = pd.concat(
         [
             high - low,
-            (high - prev_close).abs(),
-            (low - prev_close).abs(),
+            (
+                high -
+                prev_close
+            ).abs(),
+            (
+                low -
+                prev_close
+            ).abs()
         ],
         axis=1
-    ).max(axis=1)
+    ).max(
+        axis=1
+    )
 
     atr_value = rma(
         tr,
@@ -605,11 +658,13 @@ def adx(
 
     plus_di = (
         100
-        * rma(
+        *
+        rma(
             plus_dm,
             length
         )
-        / atr_value.replace(
+        /
+        atr_value.replace(
             0,
             np.nan
         )
@@ -617,11 +672,13 @@ def adx(
 
     minus_di = (
         100
-        * rma(
+        *
+        rma(
             minus_dm,
             length
         )
-        / atr_value.replace(
+        /
+        atr_value.replace(
             0,
             np.nan
         )
@@ -629,16 +686,18 @@ def adx(
 
     dx = (
         100
-        * (
-            (plus_di - minus_di).abs()
-            /
-            (
-                plus_di
-                + minus_di
-            ).replace(
-                0,
-                np.nan
-            )
+        *
+        (
+            plus_di -
+            minus_di
+        ).abs()
+        /
+        (
+            plus_di +
+            minus_di
+        ).replace(
+            0,
+            np.nan
         )
     )
 
@@ -652,42 +711,42 @@ def adx(
 # SESSION VWAP
 # ============================================================
 
-def session_vwap(df):
-
-    temp = df.copy()
+def session_vwap(
+    df
+):
 
     typical_price = (
-        temp["high"]
-        + temp["low"]
-        + temp["close"]
+        df["high"]
+        +
+        df["low"]
+        +
+        df["close"]
     ) / 3
 
-    temp["_date"] = (
-        temp["datetime"]
+    day = (
+        df["datetime"]
         .dt.date
     )
 
     pv = (
         typical_price
-        * temp["volume"]
+        *
+        df["volume"]
     )
 
     cumulative_pv = (
-        pv.groupby(
-            temp["_date"]
-        )
+        pv
+        .groupby(day)
         .cumsum()
     )
 
     cumulative_volume = (
-        temp["volume"]
-        .groupby(
-            temp["_date"]
-        )
+        df["volume"]
+        .groupby(day)
         .cumsum()
     )
 
-    result = (
+    return (
         cumulative_pv
         /
         cumulative_volume.replace(
@@ -696,8 +755,6 @@ def session_vwap(df):
         )
     )
 
-    return result
-
 
 # ============================================================
 # PREPARE DATA
@@ -705,7 +762,6 @@ def session_vwap(df):
 
 def prepare(
     df,
-    orb_minutes,
     rsi_len,
     adx_len,
     atr_len
@@ -713,14 +769,18 @@ def prepare(
 
     df = df.copy()
 
-    df = df.sort_values(
-        "datetime"
-    ).reset_index(
-        drop=True
+    df = (
+        df
+        .sort_values(
+            "datetime"
+        )
+        .reset_index(
+            drop=True
+        )
     )
 
     # --------------------------------------------------------
-    # Indicators
+    # INDICATORS
     # --------------------------------------------------------
 
     df["atr"] = atr(
@@ -743,7 +803,7 @@ def prepare(
     )
 
     # --------------------------------------------------------
-    # Volume
+    # VOLUME
     # --------------------------------------------------------
 
     df["vol_sma"] = (
@@ -765,27 +825,20 @@ def prepare(
     )
 
     # --------------------------------------------------------
-    # Previous close
-    # --------------------------------------------------------
-
-    df["prev_close"] = (
-        df["close"]
-        .shift(1)
-    )
-
-    # --------------------------------------------------------
-    # Candle body
+    # CANDLE BODY
     # --------------------------------------------------------
 
     candle_range = (
         df["high"]
-        - df["low"]
+        -
+        df["low"]
     )
 
     df["body_strength"] = (
         (
             df["close"]
-            - df["open"]
+            -
+            df["open"]
         ).abs()
         /
         candle_range.replace(
@@ -795,17 +848,19 @@ def prepare(
     )
 
     # --------------------------------------------------------
-    # Bull / Bear
+    # BULL / BEAR
     # --------------------------------------------------------
 
     df["bull"] = (
         df["close"]
-        > df["open"]
+        >
+        df["open"]
     )
 
     df["bear"] = (
         df["close"]
-        < df["open"]
+        <
+        df["open"]
     )
 
     return df
@@ -822,20 +877,13 @@ def broker_charge(
     brokerage
 ):
 
-    trade_value = (
-        float(entry)
-        +
-        float(exit_price)
-    ) * float(qty)
-
-    # Fixed brokerage per completed trade
-    brk = float(brokerage)
-
-    return brk
+    return float(
+        brokerage
+    )
 
 
 # ============================================================
-# BACKTEST
+# ORB BACKTEST
 # ============================================================
 
 def run_backtest(
@@ -843,30 +891,29 @@ def run_backtest(
     p
 ):
 
-    df = df.copy()
-
     trades = []
-
-    equity_curve = []
 
     position = None
 
     current_day = None
 
     orb_high = None
+
     orb_low = None
+
     orb_locked = False
 
     daily_pnl = 0.0
+
     daily_trades = 0
 
     equity = float(
         p["initial_capital"]
     )
 
-    # --------------------------------------------------------
-    # Loop candles
-    # --------------------------------------------------------
+    # ========================================================
+    # CANDLE LOOP
+    # ========================================================
 
     for i in range(
         len(df)
@@ -880,20 +927,18 @@ def run_backtest(
 
         tm = ts.time()
 
-        # ----------------------------------------------------
-        # New day
-        # ----------------------------------------------------
+        # ====================================================
+        # NEW DAY
+        # ====================================================
 
         if current_day != day:
-
-            # Previous position should normally
-            # already have been squared off.
 
             position = None
 
             current_day = day
 
             orb_high = None
+
             orb_low = None
 
             orb_locked = False
@@ -902,23 +947,25 @@ def run_backtest(
 
             daily_trades = 0
 
-        # ----------------------------------------------------
-        # ORB BUILD
-        # ----------------------------------------------------
-
-        orb_start = p["orb_start"]
-
-        orb_end = p["orb_end"]
+        # ====================================================
+        # BUILD ORB
+        # ====================================================
 
         if (
-            tm >= orb_start
-            and tm < orb_end
+            tm >= p["orb_start"]
+            and
+            tm < p["orb_end"]
         ):
 
             if orb_high is None:
 
-                orb_high = row["high"]
-                orb_low = row["low"]
+                orb_high = (
+                    row["high"]
+                )
+
+                orb_low = (
+                    row["low"]
+                )
 
             else:
 
@@ -934,36 +981,49 @@ def run_backtest(
 
             continue
 
-        # ----------------------------------------------------
-        # Lock ORB
-        # ----------------------------------------------------
+        # ====================================================
+        # LOCK ORB
+        # ====================================================
 
         if (
             not orb_locked
-            and tm >= orb_end
-            and orb_high is not None
+            and
+            tm >= p["orb_end"]
+            and
+            orb_high is not None
         ):
 
             orb_locked = True
 
-        # ----------------------------------------------------
-        # Manage open position
-        # ----------------------------------------------------
+        # ====================================================
+        # MANAGE POSITION
+        # ====================================================
 
         if position is not None:
 
-            side = position["side"]
+            side = (
+                position["side"]
+            )
 
-            entry = position["entry"]
+            entry = (
+                position["entry"]
+            )
 
-            sl = position["sl"]
+            sl = (
+                position["sl"]
+            )
 
-            tp = position["tp"]
+            tp = (
+                position["tp"]
+            )
 
-            qty = position["qty"]
+            qty_value = (
+                position["qty"]
+            )
 
             exit_price = None
-            exit_reason = None
+
+            reason = None
 
             # ------------------------------------------------
             # LONG
@@ -981,30 +1041,27 @@ def run_backtest(
                     >= tp
                 )
 
-                if (
-                    hit_sl
-                    and hit_tp
-                ):
+                # Conservative:
+                # if SL and TP both hit,
+                # assume SL first.
 
-                    # Conservative assumption
-                    exit_price = sl
-                    exit_reason = "SL"
-
-                elif hit_sl:
+                if hit_sl:
 
                     exit_price = sl
-                    exit_reason = "SL"
+
+                    reason = "SL"
 
                 elif hit_tp:
 
                     exit_price = tp
-                    exit_reason = "TP"
+
+                    reason = "TP"
 
             # ------------------------------------------------
             # SHORT
             # ------------------------------------------------
 
-            elif side == "SHORT":
+            else:
 
                 hit_sl = (
                     row["high"]
@@ -1016,72 +1073,75 @@ def run_backtest(
                     <= tp
                 )
 
-                if (
-                    hit_sl
-                    and hit_tp
-                ):
+                if hit_sl:
 
                     exit_price = sl
-                    exit_reason = "SL"
 
-                elif hit_sl:
-
-                    exit_price = sl
-                    exit_reason = "SL"
+                    reason = "SL"
 
                 elif hit_tp:
 
                     exit_price = tp
-                    exit_reason = "TP"
+
+                    reason = "TP"
 
             # ------------------------------------------------
-            # Square off
+            # SQUARE OFF
             # ------------------------------------------------
 
             if (
                 exit_price is None
-                and tm >= p["squareoff_time"]
+                and
+                tm >= p[
+                    "squareoff_time"
+                ]
             ):
 
-                exit_price = row["close"]
+                exit_price = (
+                    row["close"]
+                )
 
-                exit_reason = "SquareOff"
+                reason = "SquareOff"
 
             # ------------------------------------------------
-            # Exit
+            # EXIT
             # ------------------------------------------------
 
             if exit_price is not None:
 
                 if side == "LONG":
 
-                    gross_pnl = (
+                    gross = (
                         exit_price
-                        - entry
-                    ) * qty
+                        -
+                        entry
+                    ) * qty_value
 
                 else:
 
-                    gross_pnl = (
+                    gross = (
                         entry
-                        - exit_price
-                    ) * qty
+                        -
+                        exit_price
+                    ) * qty_value
 
-                brokerage = broker_charge(
-                    entry,
-                    exit_price,
-                    qty,
-                    p["brokerage"]
+                brokerage = (
+                    broker_charge(
+                        entry,
+                        exit_price,
+                        qty_value,
+                        p["brokerage"]
+                    )
                 )
 
-                net_pnl = (
-                    gross_pnl
-                    - brokerage
+                net = (
+                    gross -
+                    brokerage
                 )
 
-                equity += net_pnl
+                equity += net
 
-                daily_pnl += net_pnl
+                daily_pnl += net
 
                 trades.append(
                     {
@@ -1099,50 +1159,55 @@ def run_backtest(
                         "TP": tp,
                         "Exit Time": ts,
                         "Exit": exit_price,
-                        "Reason": exit_reason,
-                        "Qty": qty,
-                        "Gross P&L": gross_pnl,
+                        "Reason": reason,
+                        "Qty": qty_value,
+                        "Gross P&L": gross,
                         "Brokerage": brokerage,
-                        "Net P&L": net_pnl,
+                        "Net P&L": net,
                         "Equity": equity,
                     }
                 )
 
                 position = None
 
-                # ------------------------------------------------
-                # Do not immediately re-enter on same candle
-                # ------------------------------------------------
-
                 continue
 
-        # ----------------------------------------------------
-        # Entry conditions
-        # ----------------------------------------------------
+        # ====================================================
+        # ENTRY FILTER
+        # ====================================================
 
         if not orb_locked:
+
             continue
 
-        if orb_high is None or orb_low is None:
-            continue
+        if (
+            orb_high is None
+            or
+            orb_low is None
+        ):
 
-        # ----------------------------------------------------
-        # Entry time
-        # ----------------------------------------------------
-
-        if tm < p["entry_start"]:
-            continue
-
-        if tm > p["entry_end"]:
             continue
 
         # ----------------------------------------------------
-        # Daily loss lock
+        # ENTRY WINDOW
+        # ----------------------------------------------------
+
+        if (
+            tm < p["entry_start"]
+            or
+            tm > p["entry_end"]
+        ):
+
+            continue
+
+        # ----------------------------------------------------
+        # DAILY LOSS
         # ----------------------------------------------------
 
         if (
             daily_pnl
-            <= -abs(
+            <=
+            -abs(
                 p["daily_max_loss"]
             )
         ):
@@ -1150,116 +1215,136 @@ def run_backtest(
             continue
 
         # ----------------------------------------------------
-        # Max trades
+        # MAX TRADES
         # ----------------------------------------------------
 
         if (
             daily_trades
-            >= p["max_trades_day"]
+            >=
+            p["max_trades_day"]
         ):
 
             continue
 
         # ----------------------------------------------------
-        # Continuous / non-continuous
+        # CONTINUOUS MODE
         # ----------------------------------------------------
 
         if (
             not p["continuous"]
-            and daily_trades > 0
+            and
+            daily_trades > 0
         ):
 
             continue
 
         # ----------------------------------------------------
-        # Indicators available?
+        # INDICATORS READY
         # ----------------------------------------------------
 
-        if pd.isna(row["atr"]):
+        if pd.isna(
+            row["atr"]
+        ):
+
             continue
 
-        if pd.isna(row["rsi"]):
+        if pd.isna(
+            row["rsi"]
+        ):
+
             continue
 
-        if pd.isna(row["adx"]):
+        if pd.isna(
+            row["adx"]
+        ):
+
             continue
 
-        if pd.isna(row["vwap"]):
+        if pd.isna(
+            row["vwap"]
+        ):
+
             continue
 
-        # ----------------------------------------------------
-        # ORB range
-        # ----------------------------------------------------
+        # ====================================================
+        # ORB RANGE
+        # ====================================================
 
         orb_range = (
-            orb_high
-            - orb_low
+            orb_high -
+            orb_low
         )
 
         if orb_range <= 0:
+
             continue
 
-        # ----------------------------------------------------
-        # ORB ATR filter
-        # ----------------------------------------------------
-
-        orb_atr_ratio = (
-            orb_range
-            /
+        orb_ratio = (
+            orb_range /
             row["atr"]
         )
 
         if (
-            orb_atr_ratio
-            < p["orb_min_atr"]
+            orb_ratio
+            <
+            p["orb_min_atr"]
         ):
 
             continue
 
         if (
-            orb_atr_ratio
-            > p["orb_max_atr"]
+            orb_ratio
+            >
+            p["orb_max_atr"]
         ):
 
             continue
 
-        # ----------------------------------------------------
+        # ====================================================
         # ADX
-        # ----------------------------------------------------
+        # ====================================================
 
         if (
             row["adx"]
-            < p["adx_min"]
+            <
+            p["adx_min"]
         ):
 
             continue
 
         # ----------------------------------------------------
-        # ADX rising
+        # ADX RISING
         # ----------------------------------------------------
 
         if p["adx_rising"]:
 
             if i == 0:
+
                 continue
 
-            prev_adx = df.iloc[
-                i - 1
-            ]["adx"]
+            previous_adx = (
+                df.iloc[
+                    i - 1
+                ]["adx"]
+            )
 
-            if pd.isna(prev_adx):
-                continue
-
-            if (
-                row["adx"]
-                <= prev_adx
+            if pd.isna(
+                previous_adx
             ):
 
                 continue
 
-        # ----------------------------------------------------
-        # Volume
-        # ----------------------------------------------------
+            if (
+                row["adx"]
+                <=
+                previous_adx
+            ):
+
+                continue
+
+        # ====================================================
+        # VOLUME
+        # ====================================================
 
         if (
             p["volume_multiplier"]
@@ -1276,17 +1361,20 @@ def run_backtest(
                 row["volume"]
                 <
                 row["vol_sma"]
-                * p["volume_multiplier"]
+                *
+                p["volume_multiplier"]
             ):
 
                 continue
 
-        # ----------------------------------------------------
-        # Recent volume
-        # ----------------------------------------------------
+        # ====================================================
+        # RECENT VOLUME
+        # ====================================================
 
         if (
-            p["recent_volume_multiplier"]
+            p[
+                "recent_volume_multiplier"
+            ]
             > 0
         ):
 
@@ -1300,69 +1388,77 @@ def run_backtest(
                 row["volume"]
                 <
                 row["recent_vol_sma"]
-                * p["recent_volume_multiplier"]
+                *
+                p[
+                    "recent_volume_multiplier"
+                ]
             ):
 
                 continue
 
-        # ----------------------------------------------------
-        # Body strength
-        # ----------------------------------------------------
+        # ====================================================
+        # BODY
+        # ====================================================
 
         if (
             row["body_strength"]
-            < p["body_strength"]
+            <
+            p["body_strength"]
         ):
 
             continue
 
-        # ----------------------------------------------------
+        # ====================================================
         # LONG SIGNAL
-        # ----------------------------------------------------
+        # ====================================================
 
-        long_signal = False
+        long_signal = (
+            p["allow_long"]
+            and
+            row["close"]
+            >
+            orb_high
+            and
+            row["close"]
+            >
+            row["open"]
+            and
+            row["rsi"]
+            >=
+            p["rsi_long"]
+            and
+            row["close"]
+            >
+            row["vwap"]
+        )
 
-        if p["allow_long"]:
-
-            long_signal = (
-                row["close"]
-                > orb_high
-                and
-                row["close"]
-                > row["open"]
-                and
-                row["rsi"]
-                >= p["rsi_long"]
-                and
-                row["close"]
-                > row["vwap"]
-            )
-
-        # ----------------------------------------------------
+        # ====================================================
         # SHORT SIGNAL
-        # ----------------------------------------------------
+        # ====================================================
 
-        short_signal = False
+        short_signal = (
+            p["allow_short"]
+            and
+            row["close"]
+            <
+            orb_low
+            and
+            row["close"]
+            <
+            row["open"]
+            and
+            row["rsi"]
+            <=
+            p["rsi_short"]
+            and
+            row["close"]
+            <
+            row["vwap"]
+        )
 
-        if p["allow_short"]:
-
-            short_signal = (
-                row["close"]
-                < orb_low
-                and
-                row["close"]
-                < row["open"]
-                and
-                row["rsi"]
-                <= p["rsi_short"]
-                and
-                row["close"]
-                < row["vwap"]
-            )
-
-        # ----------------------------------------------------
+        # ====================================================
         # LONG ENTRY
-        # ----------------------------------------------------
+        # ====================================================
 
         if long_signal:
 
@@ -1370,32 +1466,33 @@ def run_backtest(
                 row["close"]
             )
 
-            atr_value = float(
-                row["atr"]
-            )
-
             sl = min(
                 orb_low,
-                entry
-                - (
-                    atr_value
-                    * p["sl_atr"]
+                entry -
+                (
+                    float(
+                        row["atr"]
+                    )
+                    *
+                    p["sl_atr"]
                 )
             )
 
             risk = (
-                entry
-                - sl
+                entry -
+                sl
             )
 
             if risk <= 0:
+
                 continue
 
             tp = (
                 entry
-                + (
-                    risk
-                    * p["rr"]
+                +
+                (
+                    risk *
+                    p["rr"]
                 )
             )
 
@@ -1412,9 +1509,9 @@ def run_backtest(
 
             continue
 
-        # ----------------------------------------------------
+        # ====================================================
         # SHORT ENTRY
-        # ----------------------------------------------------
+        # ====================================================
 
         if short_signal:
 
@@ -1422,32 +1519,33 @@ def run_backtest(
                 row["close"]
             )
 
-            atr_value = float(
-                row["atr"]
-            )
-
             sl = max(
                 orb_high,
-                entry
-                + (
-                    atr_value
-                    * p["sl_atr"]
+                entry +
+                (
+                    float(
+                        row["atr"]
+                    )
+                    *
+                    p["sl_atr"]
                 )
             )
 
             risk = (
-                sl
-                - entry
+                sl -
+                entry
             )
 
             if risk <= 0:
+
                 continue
 
             tp = (
                 entry
-                - (
-                    risk
-                    * p["rr"]
+                -
+                (
+                    risk *
+                    p["rr"]
                 )
             )
 
@@ -1462,47 +1560,8 @@ def run_backtest(
 
             daily_trades += 1
 
-            continue
-
-    # ========================================================
-    # DATAFRAME
-    # ========================================================
-
-    trades_df = pd.DataFrame(
+    return pd.DataFrame(
         trades
-    )
-
-    if trades_df.empty:
-
-        return (
-            trades_df,
-            pd.DataFrame()
-        )
-
-    # --------------------------------------------------------
-    # Equity curve
-    # --------------------------------------------------------
-
-    equity_curve = trades_df[
-        [
-            "Exit Time",
-            "Equity"
-        ]
-    ].copy()
-
-    equity_curve = (
-        equity_curve
-        .rename(
-            columns={
-                "Exit Time": "datetime",
-                "Equity": "equity"
-            }
-        )
-    )
-
-    return (
-        trades_df,
-        equity_curve
     )
 
 
@@ -1514,18 +1573,20 @@ def calculate_metrics(
     trades
 ):
 
-    if trades is None or trades.empty:
+    if (
+        trades is None
+        or
+        trades.empty
+    ):
 
         return {
             "trades": 0,
             "wins": 0,
             "losses": 0,
             "win_rate": 0,
-            "gross_profit": 0,
-            "gross_loss": 0,
             "net_pnl": 0,
             "profit_factor": 0,
-            "max_drawdown": 0,
+            "max_drawdown": 0
         }
 
     pnl = pd.to_numeric(
@@ -1533,24 +1594,27 @@ def calculate_metrics(
         errors="coerce"
     ).fillna(0)
 
-    wins = (
-        pnl > 0
-    ).sum()
+    wins = int(
+        (
+            pnl > 0
+        ).sum()
+    )
 
-    losses = (
-        pnl < 0
-    ).sum()
+    losses = int(
+        (
+            pnl < 0
+        ).sum()
+    )
 
-    total_trades = len(
+    total = len(
         pnl
     )
 
     win_rate = (
-        wins
-        /
-        total_trades
-        * 100
-        if total_trades > 0
+        wins /
+        total *
+        100
+        if total
         else 0
     )
 
@@ -1564,13 +1628,10 @@ def calculate_metrics(
         ].sum()
     )
 
-    net_pnl = pnl.sum()
-
     if gross_loss > 0:
 
         profit_factor = (
-            gross_profit
-            /
+            gross_profit /
             gross_loss
         )
 
@@ -1578,63 +1639,52 @@ def calculate_metrics(
 
         profit_factor = np.inf
 
-    # --------------------------------------------------------
-    # Drawdown
-    # --------------------------------------------------------
-
     equity = (
         pnl.cumsum()
     )
 
-    running_high = (
+    peak = (
         equity.cummax()
     )
 
     drawdown = (
-        equity
-        - running_high
-    )
-
-    max_drawdown = (
-        drawdown.min()
+        equity -
+        peak
     )
 
     return {
-        "trades": int(total_trades),
-        "wins": int(wins),
-        "losses": int(losses),
-        "win_rate": float(win_rate),
-        "gross_profit": float(gross_profit),
-        "gross_loss": float(gross_loss),
-        "net_pnl": float(net_pnl),
-        "profit_factor": float(profit_factor),
-        "max_drawdown": float(max_drawdown),
+        "trades": total,
+        "wins": wins,
+        "losses": losses,
+        "win_rate": win_rate,
+        "net_pnl": pnl.sum(),
+        "profit_factor": profit_factor,
+        "max_drawdown": drawdown.min()
     }
 
 
 # ============================================================
-# PORTFOLIO BACKTEST
+# ALL STOCK BACKTEST
 # ============================================================
 
-def run_all_stocks(
+def backtest_all_stocks(
     market_data,
-    p
+    params
 ):
 
     all_trades = []
 
-    stock_summary = []
+    summary = []
+
+    progress = st.progress(
+        0
+    )
 
     total = len(
         market_data
     )
 
-    progress = st.progress(
-        0,
-        text="Running backtest..."
-    )
-
-    for idx, (
+    for i, (
         symbol,
         raw_df
     ) in enumerate(
@@ -1645,82 +1695,86 @@ def run_all_stocks(
 
             prepared = prepare(
                 raw_df,
-                p["orb_minutes"],
-                p["rsi_len"],
-                p["adx_len"],
-                p["atr_len"],
+                params["rsi_len"],
+                params["adx_len"],
+                params["atr_len"]
             )
 
-            trades, equity = run_backtest(
+            trades = run_backtest(
                 prepared,
-                p
+                params
             )
 
             if (
                 trades is not None
-                and not trades.empty
+                and
+                not trades.empty
             ):
 
                 trades = trades.copy()
 
-                trades["Symbol"] = symbol
+                trades["Symbol"] = (
+                    symbol
+                )
 
                 all_trades.append(
                     trades
                 )
 
-            metrics = calculate_metrics(
+            m = calculate_metrics(
                 trades
             )
 
-            stock_summary.append(
+            summary.append(
                 {
                     "Symbol": symbol,
-                    "Trades": metrics[
+                    "Trades": m[
                         "trades"
                     ],
-                    "Wins": metrics[
+                    "Wins": m[
                         "wins"
                     ],
-                    "Losses": metrics[
+                    "Losses": m[
                         "losses"
                     ],
                     "Win Rate %": round(
-                        metrics[
+                        m[
                             "win_rate"
                         ],
                         2
                     ),
                     "Net P&L": round(
-                        metrics[
+                        m[
                             "net_pnl"
                         ],
                         2
                     ),
-                    "Profit Factor": round(
-                        metrics[
-                            "profit_factor"
-                        ],
-                        2
-                    )
-                    if np.isfinite(
-                        metrics[
-                            "profit_factor"
-                        ]
-                    )
-                    else np.inf,
+                    "Profit Factor": (
+                        round(
+                            m[
+                                "profit_factor"
+                            ],
+                            2
+                        )
+                        if np.isfinite(
+                            m[
+                                "profit_factor"
+                            ]
+                        )
+                        else np.inf
+                    ),
                     "Max DD": round(
-                        metrics[
+                        m[
                             "max_drawdown"
                         ],
                         2
-                    ),
+                    )
                 }
             )
 
         except Exception as e:
 
-            stock_summary.append(
+            summary.append(
                 {
                     "Symbol": symbol,
                     "Trades": 0,
@@ -1730,48 +1784,46 @@ def run_all_stocks(
                     "Net P&L": 0,
                     "Profit Factor": 0,
                     "Max DD": 0,
-                    "Error": str(e),
+                    "Error": str(e)
                 }
             )
 
         progress.progress(
-            (idx + 1) / total,
-            text=(
-                f"Backtest "
-                f"{idx + 1}/{total}"
+            (
+                i + 1
             )
+            /
+            total
         )
 
     progress.empty()
 
     if all_trades:
 
-        combined_trades = pd.concat(
+        combined = pd.concat(
             all_trades,
             ignore_index=True
         )
 
-        if "Symbol" not in combined_trades.columns:
-
-            combined_trades["Symbol"] = ""
-
-        combined_trades = combined_trades.sort_values(
-            "Exit Time"
-        ).reset_index(
-            drop=True
+        combined = (
+            combined
+            .sort_values(
+                "Exit Time"
+            )
+            .reset_index(
+                drop=True
+            )
         )
 
     else:
 
-        combined_trades = pd.DataFrame()
-
-    summary_df = pd.DataFrame(
-        stock_summary
-    )
+        combined = pd.DataFrame()
 
     return (
-        combined_trades,
-        summary_df
+        combined,
+        pd.DataFrame(
+            summary
+        )
     )
 
 
@@ -1783,57 +1835,57 @@ if "market_data" not in st.session_state:
 
     st.session_state.market_data = {}
 
+
 if "failed_symbols" not in st.session_state:
 
     st.session_state.failed_symbols = []
 
 
+if "backtest_trades" not in st.session_state:
+
+    st.session_state.backtest_trades = (
+        pd.DataFrame()
+    )
+
+
+if "summary_df" not in st.session_state:
+
+    st.session_state.summary_df = (
+        pd.DataFrame()
+    )
+
+
 # ============================================================
-# SIDEBAR
+# SIDEBAR - DATA
 # ============================================================
 
 st.sidebar.title(
     "📡 TradingView Data"
 )
 
-st.sidebar.caption(
-    "5-minute NSE market data"
-)
-
-# ------------------------------------------------------------
-# Bars
-# ------------------------------------------------------------
-
 n_bars = st.sidebar.number_input(
-    "Bars per stock",
+    "5-Min Bars / Stock",
     min_value=500,
     max_value=5000,
     value=5000,
     step=500
 )
 
-# ------------------------------------------------------------
-# Delay
-# ------------------------------------------------------------
-
 fetch_delay = st.sidebar.number_input(
-    "Fetch delay (seconds)",
+    "Fetch Delay",
     min_value=0.0,
     max_value=5.0,
     value=0.25,
     step=0.05
 )
 
-st.sidebar.write(
-    f"Stocks: **{len(NIFTY_SYMBOLS)}**"
-)
 
-# ------------------------------------------------------------
-# Fetch button
-# ------------------------------------------------------------
+# ============================================================
+# FETCH
+# ============================================================
 
 if st.sidebar.button(
-    "📡 FETCH TRADINGVIEW DATA",
+    "📡 FETCH 5-MIN DATA",
     type="primary",
     use_container_width=True
 ):
@@ -1844,26 +1896,38 @@ if st.sidebar.button(
             "Connecting to TradingView..."
         ):
 
-            tv = create_tv_connection()
+            tv = (
+                create_tv_connection()
+            )
 
-        market_data, failed = fetch_all_stocks(
-            tv=tv,
-            symbols=NIFTY_SYMBOLS,
-            n_bars=int(n_bars),
-            delay=float(fetch_delay)
+        data, failed = (
+            fetch_all_stocks(
+                tv,
+                NIFTY_SYMBOLS,
+                int(n_bars),
+                float(fetch_delay)
+            )
         )
 
         st.session_state.market_data = (
-            market_data
+            data
         )
 
         st.session_state.failed_symbols = (
             failed
         )
 
+        st.session_state.backtest_trades = (
+            pd.DataFrame()
+        )
+
+        st.session_state.summary_df = (
+            pd.DataFrame()
+        )
+
         st.success(
-            f"✅ Download complete. "
-            f"{len(market_data)} stocks loaded."
+            f"✅ Loaded "
+            f"{len(data)} stocks."
         )
 
     except Exception as e:
@@ -1873,9 +1937,9 @@ if st.sidebar.button(
         )
 
 
-# ------------------------------------------------------------
-# Clear
-# ------------------------------------------------------------
+# ============================================================
+# CLEAR
+# ============================================================
 
 if st.sidebar.button(
     "🗑️ CLEAR DATA",
@@ -1886,11 +1950,19 @@ if st.sidebar.button(
 
     st.session_state.failed_symbols = []
 
+    st.session_state.backtest_trades = (
+        pd.DataFrame()
+    )
+
+    st.session_state.summary_df = (
+        pd.DataFrame()
+    )
+
     st.rerun()
 
 
 # ============================================================
-# MAIN TITLE
+# MAIN
 # ============================================================
 
 st.title(
@@ -1898,24 +1970,891 @@ st.title(
 )
 
 st.caption(
-    "TradingView → 5 Minute NSE Data → ORB Strategy → Backtest"
+    "Direct TradingView Data • No Input CSV"
 )
+
+
+market_data = (
+    st.session_state.market_data
+)
+
+
+if not market_data:
+
+    st.info(
+        "👈 Click "
+        "**FETCH 5-MIN DATA** "
+        "from the sidebar."
+    )
+
+    st.stop()
 
 
 # ============================================================
 # DATA STATUS
 # ============================================================
 
-market_data = (
-    st.session_state.market_data
+col1, col2, col3 = (
+    st.columns(3)
 )
 
-if not market_data:
+with col1:
 
-    st.info(
-        "👈 Click **FETCH TRADINGVIEW DATA** "
-        "from the sidebar first."
+    st.metric(
+        "Stocks Loaded",
+        len(market_data)
     )
 
-    st.markdown(
-        """
+with col2:
+
+    total_rows = sum(
+        len(df)
+        for df in market_data.values()
+    )
+
+    st.metric(
+        "Total Rows",
+        f"{total_rows:,}"
+    )
+
+with col3:
+
+    st.metric(
+        "Failed",
+        len(
+            st.session_state.failed_symbols
+        )
+    )
+
+
+# ============================================================
+# FAILED
+# ============================================================
+
+if st.session_state.failed_symbols:
+
+    with st.expander(
+        "⚠️ Failed Symbols"
+    ):
+
+        st.dataframe(
+            pd.DataFrame(
+                st.session_state.failed_symbols
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+# ============================================================
+# STOCK SELECT
+# ============================================================
+
+st.sidebar.divider()
+
+available_symbols = sorted(
+    market_data.keys()
+)
+
+selected_stock = st.sidebar.selectbox(
+    "Backtest Stock",
+    [
+        "ALL STOCKS"
+    ]
+    +
+    available_symbols
+)
+
+
+# ============================================================
+# ORB SETTINGS
+# ============================================================
+
+st.sidebar.subheader(
+    "🎯 ORB"
+)
+
+orb_end = st.sidebar.time_input(
+    "ORB End",
+    value=time(
+        9,
+        30
+    )
+)
+
+entry_start = st.sidebar.time_input(
+    "Entry Start",
+    value=time(
+        9,
+        30
+    )
+)
+
+entry_end = st.sidebar.time_input(
+    "Entry End",
+    value=time(
+        10,
+        30
+    )
+)
+
+squareoff = st.sidebar.time_input(
+    "Squareoff",
+    value=time(
+        15,
+        13
+    )
+)
+
+
+# ============================================================
+# INDICATORS
+# ============================================================
+
+st.sidebar.subheader(
+    "📊 Indicators"
+)
+
+rsi_len = st.sidebar.number_input(
+    "RSI Length",
+    min_value=2,
+    max_value=100,
+    value=14
+)
+
+rsi_long = st.sidebar.number_input(
+    "Long RSI >= ",
+    min_value=1.0,
+    max_value=99.0,
+    value=50.0,
+    step=1.0
+)
+
+rsi_short = st.sidebar.number_input(
+    "Short RSI <= ",
+    min_value=1.0,
+    max_value=99.0,
+    value=40.0,
+    step=1.0
+)
+
+adx_len = st.sidebar.number_input(
+    "ADX Length",
+    min_value=2,
+    max_value=100,
+    value=9
+)
+
+adx_min = st.sidebar.number_input(
+    "Minimum ADX",
+    min_value=0.0,
+    max_value=100.0,
+    value=20.0,
+    step=1.0
+)
+
+adx_rising = st.sidebar.checkbox(
+    "ADX Must Be Rising",
+    value=False
+)
+
+atr_len = st.sidebar.number_input(
+    "ATR Length",
+    min_value=2,
+    max_value=100,
+    value=14
+)
+
+
+# ============================================================
+# ORB ATR
+# ============================================================
+
+st.sidebar.subheader(
+    "📏 ORB Range"
+)
+
+orb_min_atr = st.sidebar.number_input(
+    "ORB Min ATR",
+    min_value=0.0,
+    max_value=20.0,
+    value=1.0,
+    step=0.1
+)
+
+orb_max_atr = st.sidebar.number_input(
+    "ORB Max ATR",
+    min_value=0.1,
+    max_value=50.0,
+    value=3.0,
+    step=0.1
+)
+
+
+# ============================================================
+# VOLUME
+# ============================================================
+
+st.sidebar.subheader(
+    "📊 Volume"
+)
+
+volume_multiplier = st.sidebar.number_input(
+    "Volume SMA Multiplier",
+    min_value=0.0,
+    max_value=20.0,
+    value=1.0,
+    step=0.1
+)
+
+recent_volume_multiplier = (
+    st.sidebar.number_input(
+        "Recent Volume Multiplier",
+        min_value=0.0,
+        max_value=20.0,
+        value=1.2,
+        step=0.1
+    )
+)
+
+body_strength = st.sidebar.number_input(
+    "Body Strength",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.60,
+    step=0.05
+)
+
+
+# ============================================================
+# RISK
+# ============================================================
+
+st.sidebar.subheader(
+    "💰 Risk"
+)
+
+rr = st.sidebar.number_input(
+    "Risk Reward",
+    min_value=0.1,
+    max_value=20.0,
+    value=2.0,
+    step=0.1
+)
+
+sl_atr = st.sidebar.number_input(
+    "SL ATR Multiplier",
+    min_value=0.1,
+    max_value=20.0,
+    value=1.5,
+    step=0.1
+)
+
+qty = st.sidebar.number_input(
+    "Quantity",
+    min_value=1,
+    max_value=100000,
+    value=50
+)
+
+capital = st.sidebar.number_input(
+    "Initial Capital",
+    min_value=1000.0,
+    max_value=100000000.0,
+    value=75000.0,
+    step=1000.0
+)
+
+brokerage = st.sidebar.number_input(
+    "Brokerage / Trade",
+    min_value=0.0,
+    max_value=1000.0,
+    value=40.0,
+    step=5.0
+)
+
+daily_max_loss = st.sidebar.number_input(
+    "Daily Max Loss",
+    min_value=0.0,
+    max_value=10000000.0,
+    value=5000.0,
+    step=500.0
+)
+
+
+# ============================================================
+# TRADE MODE
+# ============================================================
+
+st.sidebar.subheader(
+    "🔄 Trade Mode"
+)
+
+continuous = st.sidebar.checkbox(
+    "Continuous Trade",
+    value=False
+)
+
+max_trades_day = st.sidebar.number_input(
+    "Max Trades / Day",
+    min_value=1,
+    max_value=100,
+    value=10
+)
+
+allow_long = st.sidebar.checkbox(
+    "Enable LONG",
+    value=True
+)
+
+allow_short = st.sidebar.checkbox(
+    "Enable SHORT",
+    value=True
+)
+
+
+# ============================================================
+# PARAMETERS
+# ============================================================
+
+params = {
+
+    "orb_start": time(
+        9,
+        15
+    ),
+
+    "orb_end": orb_end,
+
+    "entry_start": entry_start,
+
+    "entry_end": entry_end,
+
+    "squareoff_time": squareoff,
+
+    "rsi_len": int(
+        rsi_len
+    ),
+
+    "rsi_long": float(
+        rsi_long
+    ),
+
+    "rsi_short": float(
+        rsi_short
+    ),
+
+    "adx_len": int(
+        adx_len
+    ),
+
+    "adx_min": float(
+        adx_min
+    ),
+
+    "adx_rising": bool(
+        adx_rising
+    ),
+
+    "atr_len": int(
+        atr_len
+    ),
+
+    "orb_min_atr": float(
+        orb_min_atr
+    ),
+
+    "orb_max_atr": float(
+        orb_max_atr
+    ),
+
+    "volume_multiplier": float(
+        volume_multiplier
+    ),
+
+    "recent_volume_multiplier": float(
+        recent_volume_multiplier
+    ),
+
+    "body_strength": float(
+        body_strength
+    ),
+
+    "rr": float(
+        rr
+    ),
+
+    "sl_atr": float(
+        sl_atr
+    ),
+
+    "qty": int(
+        qty
+    ),
+
+    "initial_capital": float(
+        capital
+    ),
+
+    "brokerage": float(
+        brokerage
+    ),
+
+    "daily_max_loss": float(
+        daily_max_loss
+    ),
+
+    "continuous": bool(
+        continuous
+    ),
+
+    "max_trades_day": int(
+        max_trades_day
+    ),
+
+    "allow_long": bool(
+        allow_long
+    ),
+
+    "allow_short": bool(
+        allow_short
+    )
+}
+
+
+# ============================================================
+# RUN BACKTEST BUTTON
+# ============================================================
+
+st.divider()
+
+if st.button(
+    "🚀 RUN BACKTEST",
+    type="primary",
+    use_container_width=True
+):
+
+    # ========================================================
+    # ALL STOCKS
+    # ========================================================
+
+    if selected_stock == "ALL STOCKS":
+
+        trades, summary = (
+            backtest_all_stocks(
+                market_data,
+                params
+            )
+        )
+
+    # ========================================================
+    # ONE STOCK
+    # ========================================================
+
+    else:
+
+        raw_df = (
+            market_data[
+                selected_stock
+            ]
+        )
+
+        prepared_df = prepare(
+            raw_df,
+            params["rsi_len"],
+            params["adx_len"],
+            params["atr_len"]
+        )
+
+        trades = run_backtest(
+            prepared_df,
+            params
+        )
+
+        if not trades.empty:
+
+            trades["Symbol"] = (
+                selected_stock
+            )
+
+        m = calculate_metrics(
+            trades
+        )
+
+        summary = pd.DataFrame(
+            [
+                {
+                    "Symbol": selected_stock,
+                    "Trades": m[
+                        "trades"
+                    ],
+                    "Wins": m[
+                        "wins"
+                    ],
+                    "Losses": m[
+                        "losses"
+                    ],
+                    "Win Rate %": round(
+                        m[
+                            "win_rate"
+                        ],
+                        2
+                    ),
+                    "Net P&L": round(
+                        m[
+                            "net_pnl"
+                        ],
+                        2
+                    ),
+                    "Profit Factor": (
+                        round(
+                            m[
+                                "profit_factor"
+                            ],
+                            2
+                        )
+                        if np.isfinite(
+                            m[
+                                "profit_factor"
+                            ]
+                        )
+                        else np.inf
+                    ),
+                    "Max DD": round(
+                        m[
+                            "max_drawdown"
+                        ],
+                        2
+                    )
+                }
+            ]
+        )
+
+    st.session_state.backtest_trades = (
+        trades
+    )
+
+    st.session_state.summary_df = (
+        summary
+    )
+
+
+# ============================================================
+# SHOW RESULT
+# ============================================================
+
+trades = (
+    st.session_state.backtest_trades
+)
+
+summary = (
+    st.session_state.summary_df
+)
+
+
+if (
+    trades is None
+    or
+    trades.empty
+):
+
+    st.info(
+        "Click RUN BACKTEST."
+    )
+
+    st.stop()
+
+
+# ============================================================
+# METRICS
+# ============================================================
+
+metrics = calculate_metrics(
+    trades
+)
+
+c1, c2, c3, c4, c5, c6 = (
+    st.columns(6)
+)
+
+with c1:
+
+    st.metric(
+        "Trades",
+        metrics["trades"]
+    )
+
+with c2:
+
+    st.metric(
+        "Wins",
+        metrics["wins"]
+    )
+
+with c3:
+
+    st.metric(
+        "Losses",
+        metrics["losses"]
+    )
+
+with c4:
+
+    st.metric(
+        "Win Rate",
+        f"{metrics['win_rate']:.2f}%"
+    )
+
+with c5:
+
+    st.metric(
+        "Net P&L",
+        f"₹{metrics['net_pnl']:,.2f}"
+    )
+
+with c6:
+
+    pf = metrics[
+        "profit_factor"
+    ]
+
+    st.metric(
+        "Profit Factor",
+        (
+            f"{pf:.2f}"
+            if np.isfinite(pf)
+            else "∞"
+        )
+    )
+
+
+st.metric(
+    "Max Drawdown",
+    f"₹{metrics['max_drawdown']:,.2f}"
+)
+
+
+# ============================================================
+# STOCK SUMMARY
+# ============================================================
+
+if selected_stock == "ALL STOCKS":
+
+    st.subheader(
+        "📊 Stock-wise Results"
+    )
+
+    if not summary.empty:
+
+        summary = (
+            summary
+            .sort_values(
+                "Net P&L",
+                ascending=False
+            )
+            .reset_index(
+                drop=True
+            )
+        )
+
+        st.dataframe(
+            summary,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        winners = int(
+            (
+                summary[
+                    "Net P&L"
+                ]
+                > 0
+            ).sum()
+        )
+
+        losers = int(
+            (
+                summary[
+                    "Net P&L"
+                ]
+                < 0
+            ).sum()
+        )
+
+        c1, c2, c3 = (
+            st.columns(3)
+        )
+
+        with c1:
+
+            st.metric(
+                "Profitable Stocks",
+                winners
+            )
+
+        with c2:
+
+            st.metric(
+                "Losing Stocks",
+                losers
+            )
+
+        with c3:
+
+            st.metric(
+                "Stocks Tested",
+                len(summary)
+            )
+
+
+# ============================================================
+# EQUITY CURVE
+# ============================================================
+
+st.subheader(
+    "📈 Equity Curve"
+)
+
+equity = (
+    trades
+    .sort_values(
+        "Exit Time"
+    )
+    .copy()
+)
+
+equity[
+    "Combined Equity"
+] = (
+    params["initial_capital"]
+    +
+    equity[
+        "Net P&L"
+    ].cumsum()
+)
+
+chart_df = (
+    equity[
+        [
+            "Exit Time",
+            "Combined Equity"
+        ]
+    ]
+    .set_index(
+        "Exit Time"
+    )
+)
+
+st.line_chart(
+    chart_df[
+        "Combined Equity"
+    ]
+)
+
+
+# ============================================================
+# TRADE TABLE
+# ============================================================
+
+st.subheader(
+    "📋 Trade Report"
+)
+
+display_trades = (
+    trades
+    .sort_values(
+        "Exit Time",
+        ascending=False
+    )
+)
+
+st.dataframe(
+    display_trades,
+    use_container_width=True,
+    hide_index=True
+)
+
+
+# ============================================================
+# DOWNLOAD TRADE REPORT
+# ============================================================
+
+csv_data = (
+    display_trades
+    .to_csv(
+        index=False
+    )
+    .encode(
+        "utf-8"
+    )
+)
+
+st.download_button(
+    "⬇️ Download Trade Report",
+    data=csv_data,
+    file_name="orb_trade_report.csv",
+    mime="text/csv"
+)
+
+
+# ============================================================
+# RAW 5-MIN DATA
+# ============================================================
+
+if selected_stock != "ALL STOCKS":
+
+    st.subheader(
+        f"📡 {selected_stock} "
+        f"— TradingView 5-Min Data"
+    )
+
+    selected_df = (
+        market_data[
+            selected_stock
+        ]
+    )
+
+    c1, c2, c3 = (
+        st.columns(3)
+    )
+
+    with c1:
+
+        st.metric(
+            "Rows",
+            f"{len(selected_df):,}"
+        )
+
+    with c2:
+
+        st.metric(
+            "First Candle",
+            str(
+                selected_df[
+                    "datetime"
+                ].min()
+            )
+        )
+
+    with c3:
+
+        st.metric(
+            "Last Candle",
+            str(
+                selected_df[
+                    "datetime"
+                ].max()
+            )
+        )
+
+    with st.expander(
+        "View Raw 5-Min Data"
+    ):
+
+        st.dataframe(
+            selected_df.tail(
+                500
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
