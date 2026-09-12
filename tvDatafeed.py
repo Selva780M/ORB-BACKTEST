@@ -867,34 +867,3 @@ class TvDatafeed:
         self.__close_connection()
 
 
-# ============================================================
-# TEST
-# ============================================================
-
-if __name__ == "__main__":
-
-    logging.basicConfig(
-        level=logging.INFO
-    )
-
-    TV_TOKEN = None
-
-    tv = TvDatafeed(
-        token=TV_TOKEN
-    )
-
-    df = tv.get_hist(
-        symbol="RELIANCE",
-        exchange="NSE",
-        interval=Interval.in_5_minute,
-        n_bars=500
-    )
-
-    print("\n========== RESULT ==========\n")
-
-    print(df.tail(20))
-
-    print("\nRows:", len(df))
-
-    tv.close()
-```
