@@ -1,4 +1,4 @@
-```python
+
 # ============================================================
 # app.py
 # Streamlit TradingView Historical Data Test
@@ -755,4 +755,4 @@ st.divider()
 st.caption(
     "TradingView historical data diagnostic test"
 )
-```
+
