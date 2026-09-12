@@ -276,7 +276,7 @@ def fetch_one_stock(
                 exchange="NSE",
                 interval=Interval.in_5_minute,
                 n_bars=n_bars,
-                fut_contract=None,
+                fut_contract=0,
                 extended_session=False,
             )
 
