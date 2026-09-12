@@ -1,4 +1,3 @@
-
 import enum
 import json
 import logging
@@ -20,6 +19,7 @@ from websocket import create_connection
 # ============================================================
 
 class Interval(enum.Enum):
+
     in_30_minute = "30"
     in_1_minute = "1"
     in_3_minute = "3"
@@ -38,7 +38,7 @@ class Interval(enum.Enum):
 
 
 # ============================================================
-# TV DATAFEED
+# TRADINGVIEW DATAFEED
 # ============================================================
 
 class TvDatafeed:
@@ -56,10 +56,6 @@ class TvDatafeed:
     __ws_url = (
         "wss://data.tradingview.com/socket.io/websocket"
     )
-
-    __ws_headers = {
-        "Origin": "https://data.tradingview.com"
-    }
 
     __signin_headers = {
         "Referer": "https://www.tradingview.com"
@@ -80,33 +76,42 @@ class TvDatafeed:
     ) -> None:
 
         self.ws_debug = False
+
         self.ws = None
 
         # ----------------------------------------------------
-        # AUTH TOKEN
+        # AUTH
         # ----------------------------------------------------
 
         if token:
+
             self.token = token
 
         elif username and password:
+
             self.token = self.__auth(
                 username,
                 password
             )
 
         else:
+
             self.token = None
 
-        # Anonymous TradingView token
+        # Anonymous token
         if not self.token:
-            self.token = "unauthorized_user_token"
+
+            self.token = (
+                "unauthorized_user_token"
+            )
 
         # ----------------------------------------------------
         # SESSIONS
         # ----------------------------------------------------
 
-        self.session = self.__generate_session()
+        self.session = (
+            self.__generate_session()
+        )
 
         self.chart_session = (
             self.__generate_chart_session()
@@ -114,10 +119,14 @@ class TvDatafeed:
 
 
     # ========================================================
-    # LOGIN
+    # AUTHENTICATION
     # ========================================================
 
-    def __auth(self, username, password):
+    def __auth(
+        self,
+        username,
+        password
+    ):
 
         data = {
             "username": username,
@@ -145,14 +154,9 @@ class TvDatafeed:
             )
 
             if token:
+
                 logging.info(
                     "TradingView login successful"
-                )
-
-            else:
-                logging.error(
-                    "TradingView login response "
-                    "does not contain auth_token"
                 )
 
             return token
@@ -168,13 +172,13 @@ class TvDatafeed:
 
 
     # ========================================================
-    # WEBSOCKET CONNECTION
+    # CREATE WEBSOCKET
     # ========================================================
 
     def __create_connection(self):
 
         logging.debug(
-            "Creating TradingView websocket connection"
+            "Creating TradingView websocket"
         )
 
         self.ws = create_connection(
@@ -187,7 +191,7 @@ class TvDatafeed:
 
 
     # ========================================================
-    # CLOSE CONNECTION
+    # CLOSE WEBSOCKET
     # ========================================================
 
     def __close_connection(self):
@@ -195,17 +199,20 @@ class TvDatafeed:
         try:
 
             if self.ws:
+
                 self.ws.close()
 
         except Exception:
+
             pass
 
         finally:
+
             self.ws = None
 
 
     # ========================================================
-    # SESSION ID
+    # GENERATE SESSION
     # ========================================================
 
     @staticmethod
@@ -213,7 +220,9 @@ class TvDatafeed:
 
         string_length = 12
 
-        letters = string.ascii_lowercase
+        letters = (
+            string.ascii_lowercase
+        )
 
         random_string = "".join(
             random.choice(letters)
@@ -228,7 +237,9 @@ class TvDatafeed:
 
         string_length = 12
 
-        letters = string.ascii_lowercase
+        letters = (
+            string.ascii_lowercase
+        )
 
         random_string = "".join(
             random.choice(letters)
@@ -239,7 +250,7 @@ class TvDatafeed:
 
 
     # ========================================================
-    # MESSAGE FORMAT
+    # MESSAGE HEADER
     # ========================================================
 
     @staticmethod
@@ -252,6 +263,10 @@ class TvDatafeed:
             + message
         )
 
+
+    # ========================================================
+    # CREATE MESSAGE
+    # ========================================================
 
     @staticmethod
     def __construct_message(
@@ -274,13 +289,23 @@ class TvDatafeed:
         param_list
     ):
 
-        message = self.__construct_message(
-            func,
-            param_list
+        message = (
+            self.__construct_message(
+                func,
+                param_list
+            )
         )
 
-        return self.__prepend_header(message)
+        return (
+            self.__prepend_header(
+                message
+            )
+        )
 
+
+    # ========================================================
+    # SEND MESSAGE
+    # ========================================================
 
     def __send_message(
         self,
@@ -288,12 +313,15 @@ class TvDatafeed:
         args
     ):
 
-        message = self.__create_message(
-            func,
-            args
+        message = (
+            self.__create_message(
+                func,
+                args
+            )
         )
 
         if self.ws_debug:
+
             print(message)
 
         self.ws.send(message)
@@ -310,20 +338,35 @@ class TvDatafeed:
         contract=None
     ):
 
-        symbol = str(symbol).upper().strip()
-        exchange = str(exchange).upper().strip()
+        symbol = (
+            str(symbol)
+            .upper()
+            .strip()
+        )
+
+        exchange = (
+            str(exchange)
+            .upper()
+            .strip()
+        )
 
         # Already formatted
         if ":" in symbol:
+
             return symbol
 
         # Cash / Equity
         if contract is None:
 
-            return f"{exchange}:{symbol}"
+            return (
+                f"{exchange}:{symbol}"
+            )
 
         # Futures
-        if isinstance(contract, int):
+        if isinstance(
+            contract,
+            int
+        ):
 
             return (
                 f"{exchange}:{symbol}{contract}!"
@@ -335,7 +378,7 @@ class TvDatafeed:
 
 
     # ========================================================
-    # PARSE TRADINGVIEW DATA
+    # CREATE DATAFRAME
     # ========================================================
 
     @staticmethod
@@ -344,10 +387,20 @@ class TvDatafeed:
         symbol
     ):
 
+        empty_columns = [
+            "symbol",
+            "Datetime",
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+        ]
+
         try:
 
             # ------------------------------------------------
-            # Locate series data
+            # Find candle series
             # ------------------------------------------------
 
             match = re.search(
@@ -364,21 +417,15 @@ class TvDatafeed:
                 )
 
                 return pd.DataFrame(
-                    columns=[
-                        "symbol",
-                        "Datetime",
-                        "Open",
-                        "High",
-                        "Low",
-                        "Close",
-                        "Volume"
-                    ]
+                    columns=empty_columns
                 )
 
-            series_data = match.group(1)
+            series_data = (
+                match.group(1)
+            )
 
             # ------------------------------------------------
-            # Find each node
+            # Find candle nodes
             # ------------------------------------------------
 
             nodes = re.findall(
@@ -394,24 +441,27 @@ class TvDatafeed:
             )
 
             # ------------------------------------------------
-            # Parse rows
+            # Parse candles
             # ------------------------------------------------
 
             for node in nodes:
 
-                values = node[1]
+                values_text = node[1]
 
                 try:
 
                     values = json.loads(
-                        "[" + values + "]"
+                        "["
+                        + values_text
+                        + "]"
                     )
 
                 except Exception:
 
                     continue
 
-                if len(values) < 6:
+                if len(values) < 5:
+
                     continue
 
                 try:
@@ -430,18 +480,44 @@ class TvDatafeed:
 
                     dt_ist = (
                         dt_utc
-                        .astimezone(ist_tz)
+                        .astimezone(
+                            ist_tz
+                        )
                     )
 
-                    open_price = float(values[1])
-                    high_price = float(values[2])
-                    low_price = float(values[3])
-                    close_price = float(values[4])
+                    open_price = float(
+                        values[1]
+                    )
 
-                    # TradingView sometimes gives volume
-                    try:
-                        volume = float(values[5])
-                    except Exception:
+                    high_price = float(
+                        values[2]
+                    )
+
+                    low_price = float(
+                        values[3]
+                    )
+
+                    close_price = float(
+                        values[4]
+                    )
+
+                    if (
+                        len(values)
+                        > 5
+                    ):
+
+                        try:
+
+                            volume = float(
+                                values[5]
+                            )
+
+                        except Exception:
+
+                            volume = 0.0
+
+                    else:
+
                         volume = 0.0
 
                     rows.append(
@@ -456,10 +532,11 @@ class TvDatafeed:
                     )
 
                 except Exception:
+
                     continue
 
             # ------------------------------------------------
-            # DataFrame
+            # No rows
             # ------------------------------------------------
 
             if not rows:
@@ -470,16 +547,12 @@ class TvDatafeed:
                 )
 
                 return pd.DataFrame(
-                    columns=[
-                        "symbol",
-                        "Datetime",
-                        "Open",
-                        "High",
-                        "Low",
-                        "Close",
-                        "Volume"
-                    ]
+                    columns=empty_columns
                 )
+
+            # ------------------------------------------------
+            # DataFrame
+            # ------------------------------------------------
 
             df = pd.DataFrame(
                 rows,
@@ -503,10 +576,25 @@ class TvDatafeed:
             # Clean
             # ------------------------------------------------
 
-            df["Datetime"] = pd.to_datetime(
-                df["Datetime"],
-                errors="coerce"
+            df["Datetime"] = (
+                pd.to_datetime(
+                    df["Datetime"],
+                    errors="coerce"
+                )
             )
+
+            for col in [
+                "Open",
+                "High",
+                "Low",
+                "Close",
+                "Volume"
+            ]:
+
+                df[col] = pd.to_numeric(
+                    df[col],
+                    errors="coerce"
+                )
 
             df = df.dropna(
                 subset=[
@@ -521,10 +609,16 @@ class TvDatafeed:
             df = (
                 df
                 .drop_duplicates(
-                    subset=["Datetime"]
+                    subset=[
+                        "Datetime"
+                    ]
                 )
-                .sort_values("Datetime")
-                .reset_index(drop=True)
+                .sort_values(
+                    "Datetime"
+                )
+                .reset_index(
+                    drop=True
+                )
             )
 
             return df
@@ -532,21 +626,14 @@ class TvDatafeed:
         except Exception as e:
 
             logging.error(
-                "TradingView dataframe error for %s: %s",
+                "TradingView dataframe error "
+                "for %s: %s",
                 symbol,
                 e
             )
 
             return pd.DataFrame(
-                columns=[
-                    "symbol",
-                    "Datetime",
-                    "Open",
-                    "High",
-                    "Low",
-                    "Close",
-                    "Volume"
-                ]
+                columns=empty_columns
             )
 
 
@@ -578,7 +665,7 @@ class TvDatafeed:
             )
 
         # ----------------------------------------------------
-        # Max TradingView bars
+        # Limit bars
         # ----------------------------------------------------
 
         n_bars = min(
@@ -596,29 +683,33 @@ class TvDatafeed:
         # Format symbol
         # ----------------------------------------------------
 
-        tv_symbol = self.__format_symbol(
-            symbol=symbol,
-            exchange=exchange,
-            contract=fut_contract
+        tv_symbol = (
+            self.__format_symbol(
+                symbol=symbol,
+                exchange=exchange,
+                contract=fut_contract
+            )
         )
 
-        interval_value = interval.value
+        interval_value = (
+            interval.value
+        )
 
         logging.info(
-            "Fetching %s %s %s bars=%s",
+            "Fetching %s | interval=%s | bars=%s",
             tv_symbol,
             interval_value,
-            exchange,
             n_bars
         )
 
         raw_data = ""
 
         # ----------------------------------------------------
-        # New websocket connection
+        # New websocket
         # ----------------------------------------------------
 
         self.__close_connection()
+
         self.__create_connection()
 
         try:
@@ -629,7 +720,9 @@ class TvDatafeed:
 
             self.__send_message(
                 "set_auth_token",
-                [self.token]
+                [
+                    self.token
+                ]
             )
 
             # =================================================
@@ -645,6 +738,91 @@ class TvDatafeed:
                 [
                     self.chart_session,
                     ""
+                ]
+            )
+
+            # =================================================
+            # QUOTE SESSION
+            #
+            # IMPORTANT:
+            # This was present in your old working code.
+            # =================================================
+
+            self.session = (
+                self.__generate_session()
+            )
+
+            self.__send_message(
+                "quote_create_session",
+                [
+                    self.session
+                ]
+            )
+
+            # =================================================
+            # QUOTE FIELDS
+            # =================================================
+
+            self.__send_message(
+                "quote_set_fields",
+                [
+                    self.session,
+                    "ch",
+                    "chp",
+                    "current_session",
+                    "description",
+                    "local_description",
+                    "language",
+                    "exchange",
+                    "fractional",
+                    "is_tradable",
+                    "lp",
+                    "lp_time",
+                    "minmov",
+                    "minmove2",
+                    "original_name",
+                    "pricescale",
+                    "pro_name",
+                    "short_name",
+                    "type",
+                    "update_mode",
+                    "volume",
+                    "currency_code",
+                    "rchp",
+                    "rtc",
+                ]
+            )
+
+            # =================================================
+            # ADD SYMBOL
+            #
+            # IMPORTANT:
+            # force_permission is the key part from your
+            # previously working code.
+            # =================================================
+
+            self.__send_message(
+                "quote_add_symbols",
+                [
+                    self.session,
+                    tv_symbol,
+                    {
+                        "flags": [
+                            "force_permission"
+                        ]
+                    }
+                ]
+            )
+
+            # =================================================
+            # FAST SYMBOL
+            # =================================================
+
+            self.__send_message(
+                "quote_fast_symbols",
+                [
+                    self.session,
+                    tv_symbol
                 ]
             )
 
@@ -717,13 +895,15 @@ class TvDatafeed:
                 except Exception as e:
 
                     logging.error(
-                        "TradingView websocket receive error: %s",
+                        "TradingView websocket "
+                        "receive error: %s",
                         e
                     )
 
                     break
 
                 if not result:
+
                     continue
 
                 raw_data += (
@@ -731,17 +911,22 @@ class TvDatafeed:
                     + "\n"
                 )
 
+                result_lower = (
+                    result.lower()
+                )
+
                 # ------------------------------------------------
-                # Important errors
+                # TradingView errors
                 # ------------------------------------------------
 
                 if (
                     "permission denied"
-                    in result.lower()
+                    in result_lower
                 ):
 
                     logging.error(
-                        "TradingView permission denied for %s",
+                        "TradingView permission denied "
+                        "for %s",
                         tv_symbol
                     )
 
@@ -749,11 +934,12 @@ class TvDatafeed:
 
                 if (
                     "symbol_error"
-                    in result
+                    in result_lower
                 ):
 
                     logging.error(
-                        "TradingView symbol error for %s",
+                        "TradingView symbol error "
+                        "for %s",
                         tv_symbol
                     )
 
@@ -761,11 +947,12 @@ class TvDatafeed:
 
                 if (
                     "critical_error"
-                    in result
+                    in result_lower
                 ):
 
                     logging.error(
-                        "TradingView critical error for %s",
+                        "TradingView critical error "
+                        "for %s",
                         tv_symbol
                     )
 
@@ -773,38 +960,42 @@ class TvDatafeed:
 
                 if (
                     "series_error"
-                    in result
+                    in result_lower
                 ):
 
                     logging.error(
-                        "TradingView series error for %s",
+                        "TradingView series error "
+                        "for %s",
                         tv_symbol
                     )
 
                     break
 
                 # ------------------------------------------------
-                # Completed
+                # Finished
                 # ------------------------------------------------
 
-                if "series_completed" in result:
+                if (
+                    "series_completed"
+                    in result
+                ):
 
                     break
 
             # =================================================
-            # CREATE DATAFRAME
+            # PARSE
             # =================================================
 
             df = self.__create_df(
                 raw_data,
-                symbol
+                tv_symbol
             )
 
             if df.empty:
 
                 logging.warning(
                     "No candle data found for %s",
-                    symbol
+                    tv_symbol
                 )
 
             return df
@@ -824,9 +1015,11 @@ class TvDatafeed:
         exchange: str = ""
     ):
 
-        url = self.__search_url.format(
-            text,
-            exchange
+        url = (
+            self.__search_url.format(
+                text,
+                exchange
+            )
         )
 
         try:
@@ -838,15 +1031,15 @@ class TvDatafeed:
 
             response.raise_for_status()
 
-            data = response.text
-
             data = (
-                data
+                response.text
                 .replace("</em>", "")
                 .replace("<em>", "")
             )
 
-            return json.loads(data)
+            return json.loads(
+                data
+            )
 
         except Exception as e:
 
@@ -865,5 +1058,3 @@ class TvDatafeed:
     def close(self):
 
         self.__close_connection()
-
-
