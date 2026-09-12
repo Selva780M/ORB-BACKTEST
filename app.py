@@ -1,6 +1,7 @@
 # ============================================================
 # STREAMLIT TEST
 # ============================================================
+from tvDatafeed import TvDatafeed, Interval
 
 import streamlit as st
 
