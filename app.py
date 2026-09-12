@@ -1,7 +1,7 @@
 # ============================================================
 # STREAMLIT TEST
 # ============================================================
-from tvDatafeed import TvDatafeed
+from tvDatafeed import TvDatafeed,Interval
 
 import streamlit as st
 
@@ -54,7 +54,7 @@ if st.button(
             df = tv.get_hist(
                 symbol="SBIN",
                 exchange="NSE",
-                interval=.in_5_minute,
+                interval= Interval.in_5_minute,
                 n_bars=500
             )
 
