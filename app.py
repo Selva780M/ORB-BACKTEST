@@ -5,8 +5,7 @@ from datetime import time
 import numpy as np
 import pandas as pd
 import streamlit as st
-from tvDatafeed 
-import TvDatafeed
+from tvDatafeed import TvDatafeed
 
 st.set_page_config(
     page_title="TradingView ORB Backtest",
