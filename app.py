@@ -13,7 +13,7 @@ tv = TvDatafeed(
 )
 
 df = tv.get_hist(
-    symbol="APOLLOHOSP",
+    symbol="SBIN",
     exchange="NSE",
     interval=Interval.in_5_minute,
     n_bars=100,
