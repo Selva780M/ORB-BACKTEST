@@ -168,16 +168,14 @@ class TvDatafeed:
     # ========================================================
 
     def __create_connection(self):
-
+    
         logging.debug(
             "Creating TradingView websocket connection"
         )
-
+    
         self.ws = create_connection(
             self.__ws_url,
-            header=[
-                "Origin: https://data.tradingview.com"
-            ],
+            origin="https://data.tradingview.com",
             timeout=self.__ws_timeout
         )
 
@@ -570,31 +568,199 @@ class TvDatafeed:
         fut_contract: int = None,
         extended_session: bool = False,
     ):
-
-        # ----------------------------------------------------
-        # Validate
-        # ----------------------------------------------------
-
-        if not isinstance(
-            interval,
-            Interval
-        ):
-
-            raise ValueError(
-                "interval must be an Interval enum"
-            )
-
-        if n_bars <= 0:
-
-            raise ValueError(
-                "n_bars must be greater than 0"
-            )
-
-        # TradingView normal maximum
-        n_bars = min(
-            int(n_bars),
-            5000
+    
+        if not isinstance(interval, Interval):
+            raise ValueError("interval must be an Interval enum")
+    
+        n_bars = min(int(n_bars), 5000)
+    
+        tv_symbol = self.__format_symbol(
+            symbol=symbol,
+            exchange=exchange,
+            contract=fut_contract
         )
+    
+        interval_value = interval.value
+    
+        logging.info(
+            "TradingView request: %s | interval=%s | bars=%s",
+            tv_symbol,
+            interval_value,
+            n_bars
+        )
+    
+        self.__close_connection()
+        self.__create_connection()
+    
+        raw_data = ""
+    
+        try:
+    
+            # ====================================================
+            # AUTH
+            # ====================================================
+    
+            self.__send_message(
+                "set_auth_token",
+                [self.token]
+            )
+    
+            # ====================================================
+            # CHART SESSION
+            # ====================================================
+    
+            self.__send_message(
+                "chart_create_session",
+                [
+                    self.chart_session,
+                    ""
+                ]
+            )
+    
+            # ====================================================
+            # SYMBOL RESOLVE
+            # ====================================================
+    
+            session_type = (
+                "extended"
+                if extended_session
+                else "regular"
+            )
+    
+            symbol_data = json.dumps(
+                {
+                    "symbol": tv_symbol,
+                    "adjustment": "splits",
+                    "session": session_type
+                },
+                separators=(",", ":")
+            )
+    
+            self.__send_message(
+                "resolve_symbol",
+                [
+                    self.chart_session,
+                    "symbol_1",
+                    "=" + symbol_data
+                ]
+            )
+    
+            # ====================================================
+            # CREATE SERIES
+            # ====================================================
+    
+            self.__send_message(
+                "create_series",
+                [
+                    self.chart_session,
+                    "s1",
+                    "s1",
+                    "symbol_1",
+                    interval_value,
+                    n_bars
+                ]
+            )
+    
+            # ====================================================
+            # TIMEZONE
+            # ====================================================
+    
+            self.__send_message(
+                "switch_timezone",
+                [
+                    self.chart_session,
+                    "exchange"
+                ]
+            )
+    
+            # ====================================================
+            # RECEIVE DATA
+            # ====================================================
+    
+            while True:
+    
+                try:
+    
+                    result = self.ws.recv()
+    
+                except Exception as e:
+    
+                    logging.error(
+                        "TradingView websocket error: %s",
+                        e
+                    )
+    
+                    break
+    
+                if not result:
+                    continue
+    
+                raw_data += result + "\n"
+    
+                if self.ws_debug:
+                    print(result)
+    
+                # ------------------------------------------------
+                # Successful completion
+                # ------------------------------------------------
+    
+                if "series_completed" in result:
+    
+                    logging.info(
+                        "TradingView series completed: %s",
+                        tv_symbol
+                    )
+    
+                    break
+    
+                # ------------------------------------------------
+                # Errors
+                # ------------------------------------------------
+    
+                if "critical_error" in result:
+    
+                    logging.error(
+                        "TradingView critical error: %s",
+                        result
+                    )
+    
+                    break
+    
+                if "symbol_error" in result:
+    
+                    logging.error(
+                        "TradingView symbol error: %s",
+                        result
+                    )
+    
+                    break
+    
+                if "series_error" in result:
+    
+                    logging.error(
+                        "TradingView series error: %s",
+                        result
+                    )
+    
+                    break
+    
+            # ====================================================
+            # PARSE
+            # ====================================================
+    
+            df = self.__create_df(
+                raw_data,
+                symbol
+            )
+    
+            if df is None:
+                return pd.DataFrame()
+    
+            return df
+    
+        finally:
+    
+            self.__close_connection()
 
         # ----------------------------------------------------
         # Format symbol
