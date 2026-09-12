@@ -12,1085 +12,281 @@ import requests
 from websocket import create_connection
 
 
-# ============================================================
-# LOGGING
-# ============================================================
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
-)
-
-
-# ============================================================
-# INTERVAL
-# ============================================================
-
-class Interval(enum.Enum):
-
-    in_1_minute = "1"
-    in_3_minute = "3"
-    in_5_minute = "5"
-    in_15_minute = "15"
-    in_30_minute = "30"
-    in_45_minute = "45"
-
-    in_1_hour = "1H"
-    in_2_hour = "2H"
-    in_3_hour = "3H"
-    in_4_hour = "4H"
-
-    in_daily = "1D"
-    in_weekly = "1W"
-    in_monthly = "1M"
-
-
-# ============================================================
-# TV DATAFEED
-# ============================================================
-
 class TvDatafeed:
-
-    # ========================================================
-    # URLS
-    # ========================================================
-
-    __sign_in_url = (
-        "https://www.tradingview.com/accounts/signin/"
-    )
-
-    __search_url = (
-        "https://symbol-search.tradingview.com/"
-        "symbol_search/?text={}&hl=1&exchange={}"
-        "&lang=en&type=&domain=production"
-    )
-
-    # ========================================================
-    # HEADERS
-    # ========================================================
-
-    __ws_origin = (
-        "https://data.tradingview.com"
-    )
-
-    __signin_headers = {
-        "Referer": "https://www.tradingview.com/",
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 "
-            "(KHTML, like Gecko) "
-            "Chrome/153.0.0.0 Safari/537.36"
-        )
-    }
-
-    # ========================================================
-    # TIMEOUT
-    # ========================================================
-
-    __ws_timeout = 15
-
-
-    # ========================================================
-    # INIT
-    # ========================================================
+    __sign_in_url = 'https://www.tradingview.com/accounts/signin/'
+    __search_url = 'https://symbol-search.tradingview.com/symbol_search/?text={}&hl=1&exchange={}&lang=en&type=&domain=production'
+    __ws_headers = json.dumps({"Origin": "https://data.tradingview.com"})
+    __signin_headers = {'Referer': 'https://www.tradingview.com'}
+    __ws_timeout = 5
 
     def __init__(
         self,
         username: str = None,
         password: str = None,
         token: str = None
-    ):
+    ) -> None:
+        """Create TvDatafeed object
+
+        Args:
+            username (str, optional): tradingview username. Defaults to None.
+            password (str, optional): tradingview password. Defaults to None.
+        """
 
         self.ws_debug = False
 
-        # ----------------------------------------------------
-        # Authentication
-        # ----------------------------------------------------
-
         if token:
-
             self.token = token
-
         else:
+            self.token = self.__auth(username, password)
 
-            self.token = self.__auth(
-                username,
-                password
-            )
 
-        # ----------------------------------------------------
-        # Anonymous token
-        # ----------------------------------------------------
 
         if self.token is None:
-
-            self.token = (
-                "unauthorized_user_token"
-            )
-
-        # ----------------------------------------------------
-        # Sessions
-        # ----------------------------------------------------
-
+            self.token = "unauthorized_user_token"
+ 
         self.ws = None
+        self.session = self.__generate_session()
+        self.chart_session = self.__generate_chart_session()
 
-        self.session = (
-            self.__generate_session()
-        )
+    def __auth(self, username, password):
 
-        self.chart_session = (
-            self.__generate_chart_session()
-        )
+        if (username is None or password is None):
+            token = None
 
+        else:
+            data = {"username": username,
+                    "password": password,
+                    "remember": "on"}
+            try:
+                response = requests.post(
+                    url=self.__sign_in_url, data=data, headers=self.__signin_headers)
+                print(response.text)
+                token = response.json()['user']['auth_token']                
+            except Exception as e:          
+                token = None
 
-    # ========================================================
-    # AUTHENTICATION
-    # ========================================================
-
-    def __auth(
-        self,
-        username,
-        password
-    ):
-
-        if (
-            username is None
-            or password is None
-        ):
-
-            logging.info(
-                "TradingView anonymous mode"
-            )
-
-            return None
-
-        data = {
-            "username": username,
-            "password": password,
-            "remember": "on"
-        }
-
-        try:
-
-            response = requests.post(
-                url=self.__sign_in_url,
-                data=data,
-                headers=self.__signin_headers,
-                timeout=15
-            )
-
-            logging.info(
-                "TradingView login HTTP status: %s",
-                response.status_code
-            )
-
-            result = response.json()
-
-            if (
-                "user" in result
-                and "auth_token" in result["user"]
-            ):
-
-                token = (
-                    result["user"]["auth_token"]
-                )
-
-                logging.info(
-                    "TradingView authentication successful"
-                )
-
-                return token
-
-            logging.error(
-                "TradingView authentication response invalid: %s",
-                result
-            )
-
-            return None
-
-        except Exception as e:
-
-            logging.error(
-                "TradingView authentication failed: %s",
-                e
-            )
-
-            return None
-
-
-    # ========================================================
-    # CREATE WEBSOCKET CONNECTION
-    # ========================================================
+        return token
 
     def __create_connection(self):
-
-        logging.info(
-            "Creating TradingView websocket connection..."
+        logging.debug("creating websocket connection")
+        self.ws = create_connection(
+            "wss://data.tradingview.com/socket.io/websocket", headers=self.__ws_headers, timeout=self.__ws_timeout
         )
 
+    @staticmethod
+    def __filter_raw_message(text):
         try:
+            found = re.search('"m":"(.+?)",', text).group(1)
+            found2 = re.search('"p":(.+?"}"])}', text).group(1)
 
-            self.ws = create_connection(
-                "wss://data.tradingview.com/socket.io/websocket",
-                origin=self.__ws_origin,
-                timeout=self.__ws_timeout,
-                host="data.tradingview.com"
-            )
-
-            logging.info(
-                "TradingView websocket connected"
-            )
-
-            return True
-
-        except Exception as e:
-
-            logging.error(
-                "TradingView websocket connection failed: %s",
-                e
-            )
-
-            self.ws = None
-
-            return False
-
-
-    # ========================================================
-    # SESSION
-    # ========================================================
+            return found, found2
+        except AttributeError:
+            st.error("error in filter_raw_message")
 
     @staticmethod
     def __generate_session():
-
-        string_length = 12
-
+        stringLength = 12
         letters = string.ascii_lowercase
-
-        random_string = "".join(
-            random.choice(letters)
-            for _ in range(string_length)
-        )
-
+        random_string = "".join(random.choice(letters)
+                                for i in range(stringLength))
         return "qs_" + random_string
-
 
     @staticmethod
     def __generate_chart_session():
-
-        string_length = 12
-
+        stringLength = 12
         letters = string.ascii_lowercase
-
-        random_string = "".join(
-            random.choice(letters)
-            for _ in range(string_length)
-        )
-
+        random_string = "".join(random.choice(letters)
+                                for i in range(stringLength))
         return "cs_" + random_string
 
-
-    # ========================================================
-    # MESSAGE HEADER
-    # ========================================================
+    @staticmethod
+    def __prepend_header(st):
+        return "~m~" + str(len(st)) + "~m~" + st
 
     @staticmethod
-    def __prepend_header(message):
+    def __construct_message(func, param_list):
+        return json.dumps({"m": func, "p": param_list}, separators=(",", ":"))
 
-        return (
-            "~m~"
-            + str(len(message))
-            + "~m~"
-            + message
-        )
+    def __create_message(self, func, paramList):
+        return self.__prepend_header(self.__construct_message(func, paramList))
 
-
-    # ========================================================
-    # CONSTRUCT MESSAGE
-    # ========================================================
-
-    @staticmethod
-    def __construct_message(
-        func,
-        param_list
-    ):
-
-        return json.dumps(
-            {
-                "m": func,
-                "p": param_list
-            },
-            separators=(",", ":")
-        )
-
-
-    # ========================================================
-    # CREATE MESSAGE
-    # ========================================================
-
-    def __create_message(
-        self,
-        func,
-        param_list
-    ):
-
-        message = (
-            self.__construct_message(
-                func,
-                param_list
-            )
-        )
-
-        return (
-            self.__prepend_header(
-                message
-            )
-        )
-
-
-    # ========================================================
-    # SEND MESSAGE
-    # ========================================================
-
-    def __send_message(
-        self,
-        func,
-        args
-    ):
-
-        if self.ws is None:
-
-            raise ConnectionError(
-                "TradingView websocket is not connected"
-            )
-
-        message = (
-            self.__create_message(
-                func,
-                args
-            )
-        )
-
+    def __send_message(self, func, args):
+        m = self.__create_message(func, args)
         if self.ws_debug:
+            print(m)
+        self.ws.send(m)
 
-            print(
-                "\nSEND:",
-                message
-            )
-
-        self.ws.send(
-            message
-        )
-
-
-    # ========================================================
-    # FORMAT SYMBOL
-    # ========================================================
-
+ 
     @staticmethod
-    def __format_symbol(
-        symbol,
-        exchange,
-        contract=None
-    ):
-
-        symbol = str(
-            symbol
-        ).strip()
-
-        exchange = str(
-            exchange
-        ).strip().upper()
-
-        # ----------------------------------------------------
-        # Already formatted
-        # ----------------------------------------------------
-
-        if ":" in symbol:
-
-            return symbol
-
-        # ----------------------------------------------------
-        # CASH / EQUITY
-        # ----------------------------------------------------
-
-        if contract is None:
-
-            return (
-                f"{exchange}:{symbol}"
-            )
-
-        # ----------------------------------------------------
-        # FUTURES
-        # ----------------------------------------------------
-
-        if isinstance(
-            contract,
-            int
-        ):
-
-            return (
-                f"{exchange}:{symbol}{contract}!"
-            )
-
-        raise ValueError(
-            "contract must be an integer or None"
-        )
-
-
-    # ========================================================
-    # CREATE DATAFRAME
-    # ========================================================
-
-    @staticmethod
-    def __create_df(
-        raw_data,
-        symbol
-    ):
-
+    def __create_df(raw_data, symbol):
         try:
-
-            # ------------------------------------------------
-            # Find series data
-            # ------------------------------------------------
-
-            match = re.search(
-                r'"s":\[(.+?)\}\]',
-                raw_data,
-                re.DOTALL
-            )
-
-            if not match:
-
-                logging.warning(
-                    "No candle series found for %s",
-                    symbol
-                )
-
-                return pd.DataFrame()
-
-            out = match.group(1)
-
-            # ------------------------------------------------
-            # Split individual bars
-            # ------------------------------------------------
-
-            x = out.split(
-                ',{"'
-            )
-
-            data = []
-
-            ist_tz = pytz.timezone(
-                "Asia/Kolkata"
-            )
-
-            # ------------------------------------------------
-            # Parse each bar
-            # ------------------------------------------------
+            out = re.search(r'"s":\[(.+?)\}\]', raw_data).group(1)
+            x = out.split(',{"')
+            data = list()
+            volume_data = True
+            ist_tz = pytz.timezone('Asia/Kolkata')
 
             for xi in x:
+                xi = re.split("\\[|:|,|\\]", xi)
+                ts = datetime.datetime.fromtimestamp(float(xi[4]), tz=pytz.utc)
+                ts_ist = ts.astimezone(ist_tz)
 
-                try:
+                row = [ts_ist]
 
-                    values = re.split(
-                        r"\[|:|,|\]",
-                        xi
-                    )
+                for i in range(5, 10):
 
-                    # Need at least timestamp + OHLC
-                    if len(values) < 9:
-
+                    # skip converting volume data if does not exists
+                    if not volume_data and i == 9:
+                        row.append(0.0)
                         continue
+                    try:
+                        row.append(float(xi[i]))
 
-                    # ------------------------------------------------
-                    # Timestamp
-                    # ------------------------------------------------
+                    except ValueError:
+                        volume_data = False
+                        row.append(0.0)
+                        st.error('no volume data')
 
-                    timestamp = float(
-                        values[4]
-                    )
+                data.append(row)
 
-                    ts = datetime.datetime.fromtimestamp(
-                        timestamp,
-                        tz=pytz.utc
-                    )
+            data = pd.DataFrame(
+                data, columns=["Datetime", "Open","High", "Low", "Close", "Volume"])
+            data.insert(0, "symbol", value=symbol)
+            return data
+        except AttributeError:
+            st.error("no data, please check the exchange and symbol")
 
-                    ts_ist = (
-                        ts.astimezone(
-                            ist_tz
-                        )
-                    )
+    @staticmethod
+    def __format_symbol(symbol, exchange, contract: int = None):
 
-                    # ------------------------------------------------
-                    # OHLC
-                    # ------------------------------------------------
+        if ":" in symbol:
+            pass
+        elif contract is None:
+            symbol = f"{exchange}:{symbol}"
 
-                    open_price = float(
-                        values[5]
-                    )
+        elif isinstance(contract, int):
+            symbol = f"{exchange}:{symbol}{contract}!"
 
-                    high_price = float(
-                        values[6]
-                    )
+        else:
+            raise ValueError("not a valid contract")
 
-                    low_price = float(
-                        values[7]
-                    )
-
-                    close_price = float(
-                        values[8]
-                    )
-
-                    # ------------------------------------------------
-                    # Volume
-                    # ------------------------------------------------
-
-                    volume = 0.0
-
-                    if len(values) > 9:
-
-                        try:
-
-                            volume = float(
-                                values[9]
-                            )
-
-                        except (
-                            ValueError,
-                            TypeError
-                        ):
-
-                            volume = 0.0
-
-                    data.append(
-                        [
-                            ts_ist,
-                            open_price,
-                            high_price,
-                            low_price,
-                            close_price,
-                            volume
-                        ]
-                    )
-
-                except (
-                    ValueError,
-                    TypeError,
-                    IndexError
-                ):
-
-                    continue
-
-            # ------------------------------------------------
-            # Nothing parsed
-            # ------------------------------------------------
-
-            if not data:
-
-                logging.warning(
-                    "No parsed candle rows for %s",
-                    symbol
-                )
-
-                return pd.DataFrame()
-
-            # ------------------------------------------------
-            # DataFrame
-            # ------------------------------------------------
-
-            df = pd.DataFrame(
-                data,
-                columns=[
-                    "Datetime",
-                    "Open",
-                    "High",
-                    "Low",
-                    "Close",
-                    "Volume"
-                ]
-            )
-
-            # ------------------------------------------------
-            # Symbol
-            # ------------------------------------------------
-
-            df.insert(
-                0,
-                "symbol",
-                symbol
-            )
-
-            # ------------------------------------------------
-            # Datetime
-            # ------------------------------------------------
-
-            df["Datetime"] = pd.to_datetime(
-                df["Datetime"],
-                errors="coerce"
-            )
-
-            # ------------------------------------------------
-            # Remove invalid rows
-            # ------------------------------------------------
-
-            df = df.dropna(
-                subset=[
-                    "Datetime",
-                    "Open",
-                    "High",
-                    "Low",
-                    "Close"
-                ]
-            )
-
-            # ------------------------------------------------
-            # Sort
-            # ------------------------------------------------
-
-            df = df.sort_values(
-                "Datetime"
-            )
-
-            # ------------------------------------------------
-            # Remove duplicates
-            # ------------------------------------------------
-
-            df = df.drop_duplicates(
-                subset=[
-                    "Datetime"
-                ]
-            )
-
-            # ------------------------------------------------
-            # Reset index
-            # ------------------------------------------------
-
-            df = df.reset_index(
-                drop=True
-            )
-
-            return df
-
-        except Exception as e:
-
-            logging.error(
-                "Candle parser error for %s: %s",
-                symbol,
-                e
-            )
-
-            return pd.DataFrame()
-
-
-    # ========================================================
-    # GET HISTORICAL DATA
-    # ========================================================
-
+        return symbol
     def get_hist(
         self,
-        symbol,
-        exchange,
-        interval=Interval.in_5_minute,
-        n_bars=500,
-        extended_session=False
-    ):
-
-        # ----------------------------------------------------
-        # Convert interval FIRST
-        # ----------------------------------------------------
-
-        if isinstance(interval, Interval):
-            interval_value = interval.value
-        else:
-            interval_value = str(interval)
-
-        # Make absolutely sure it is a string
-        interval_value = str(interval_value)
-
-        logging.info(
-            "INPUT interval     = %r",
-            interval
+        symbol: str,
+        exchange: str = "NSE",
+        interval: Interval = Interval.in_daily,
+        n_bars: int = 10,
+        fut_contract: int = None,
+        extended_session: bool = False,
+    ) -> pd.DataFrame:
+        """Get historical data
+    
+        Args:
+            symbol (str): Symbol name.
+            exchange (str, optional): Exchange, not required if symbol is in the format EXCHANGE:SYMBOL. Defaults to "NSE".
+            interval (Interval, optional): Chart interval. Defaults to Interval.in_daily.
+            n_bars (int, optional): Number of bars to download, max 5000. Defaults to 10.
+            fut_contract (int, optional): None for cash, 1 for continuous current contract in front, 2 for continuous next contract in front. Defaults to None.
+            extended_session (bool, optional): Regular session if False, extended session if True. Defaults to False.
+    
+        Returns:
+            pd.DataFrame: DataFrame with OHLCV as columns.
+        """
+        symbol = self.__format_symbol(
+            symbol=symbol, exchange=exchange, contract=fut_contract
         )
-
-        logging.info(
-            "TV interval_value  = %r",
-            interval_value
-        )
-
-        # ----------------------------------------------------
-        # Validate interval
-        # ----------------------------------------------------
-
-        valid_intervals = {
-            "1",
-            "3",
-            "5",
-            "15",
-            "30",
-            "45",
-            "1H",
-            "2H",
-            "3H",
-            "4H",
-            "1D",
-            "1W",
-            "1M"
-        }
-
-        if interval_value not in valid_intervals:
-
-            raise ValueError(
-                f"Invalid TradingView interval: "
-                f"{interval_value!r}"
-            )
-
-        # ----------------------------------------------------
-        # Validate bars
-        # ----------------------------------------------------
-
-        n_bars = int(n_bars)
-
-        # ----------------------------------------------------
-        # Create websocket connection
-        # ----------------------------------------------------
-
-        if not self.__create_connection():
-
-            logging.error(
-                "Unable to connect to TradingView"
-            )
-
-            return pd.DataFrame()
-
-        # ----------------------------------------------------
-        # Format symbol
-        # ----------------------------------------------------
-
-        formatted_symbol = self.__format_symbol(
-            symbol,
-            exchange
-        )
-
-        logging.info(
-            "Fetching TradingView data: %s",
-            formatted_symbol
-        )
-
-        # ----------------------------------------------------
-        # Create chart session
-        # ----------------------------------------------------
-
+    
+        interval = interval.value
+    
+        self.__create_connection()
+    
+        self.__send_message("set_auth_token", [self.token])  # Fixed method call
+        self.__send_message("chart_create_session", [self.chart_session, ""])  # Fixed method call
+        self.__send_message("quote_create_session", [self.session])  # Fixed method call
         self.__send_message(
-            "chart_create_session",
+            "quote_set_fields",
             [
-                self.chart_session,
-                "",
-                "en",
-                "Asia/Kolkata",
-                "web",
-                "1",
-                "0"
-            ]
+                self.session,
+                "ch",
+                "chp",
+                "current_session",
+                "description",
+                "local_description",
+                "language",
+                "exchange",
+                "fractional",
+                "is_tradable",
+                "lp",
+                "lp_time",
+                "minmov",
+                "minmove2",
+                "original_name",
+                "pricescale",
+                "pro_name",
+                "short_name",
+                "type",
+                "update_mode",
+                "volume",
+                "currency_code",
+                "rchp",
+                "rtc",
+            ],
         )
-
-        # ----------------------------------------------------
-        # Authentication
-        # ----------------------------------------------------
-
         self.__send_message(
-            "set_auth_token",
-            [
-                self.token
-            ]
+            "quote_add_symbols", [self.session, symbol, {"flags": ["force_permission"]}]
         )
-
-        # ----------------------------------------------------
-        # Resolve symbol
-        # ----------------------------------------------------
-
-        session_type = (
-            "extended"
-            if extended_session
-            else "regular"
-        )
-
-        symbol_payload = (
-            '={"symbol":"'
-            + formatted_symbol
-            + '","adjustment":"splits","session":"'
-            + session_type
-            + '"}'
-        )
-
+        self.__send_message("quote_fast_symbols", [self.session, symbol])
+    
         self.__send_message(
             "resolve_symbol",
             [
                 self.chart_session,
                 "symbol_1",
-                symbol_payload
-            ]
+                '={"symbol":"'
+                + symbol
+                + '","adjustment":"splits","session":'
+                + ('"regular"' if not extended_session else '"extended"')
+                + "}",
+            ],
         )
-
-        # ----------------------------------------------------
-        # CREATE SERIES
-        # ----------------------------------------------------
-
-        logging.info(
-            "CREATE SERIES interval = %r",
-            interval_value
-        )
-
         self.__send_message(
             "create_series",
-            [
-                self.chart_session,
-                "s1",
-                "s1",
-                "symbol_1",
-                interval_value,
-                n_bars
-            ]
+            [self.chart_session, "s1", "s1", "symbol_1", interval, n_bars],
         )
-
-        # ----------------------------------------------------
-        # Switch timezone
-        # ----------------------------------------------------
-
-        self.__send_message(
-            "switch_timezone",
-            [
-                self.chart_session,
-                "Asia/Kolkata"
-            ]
-        )
-
-        # ----------------------------------------------------
-        # Receive TradingView response
-        # ----------------------------------------------------
-
+        self.__send_message("switch_timezone", [self.chart_session, "exchange"])  # Fixed method call
+    
         raw_data = ""
-
-        completed = False
-
+        # Additional processing here to return the desired DataFrame
+    
+        
         while True:
-
             try:
-
                 result = self.ws.recv()
-
-                raw_data += result
-
-                if self.ws_debug:
-
-                    print(
-                        "\nRECV:",
-                        result
-                    )
-
-                # --------------------------------------------
-                # Series completed
-                # --------------------------------------------
-
-                if "series_completed" in result:
-
-                    completed = True
-
-                    logging.info(
-                        "TradingView series completed: %s",
-                        formatted_symbol
-                    )
-
-                    break
-
-                # --------------------------------------------
-                # Critical error
-                # --------------------------------------------
-
-                if "critical_error" in result:
-
-                    logging.error(
-                        "TradingView response: %s",
-                        result
-                    )
-
-                    break
-
-                # --------------------------------------------
-                # Symbol error
-                # --------------------------------------------
-
-                if "symbol_error" in result:
-
-                    logging.error(
-                        "TradingView response: %s",
-                        result
-                    )
-
-                    break
-
-                # --------------------------------------------
-                # Series error
-                # --------------------------------------------
-
-                if "series_error" in result:
-
-                    logging.error(
-                        "TradingView response: %s",
-                        result
-                    )
-
-                    break
-
+                raw_data = raw_data + result + "\n"
             except Exception as e:
-
-                logging.error(
-                    "TradingView websocket receive error: %s",
-                    e
-                )
-
+                st.error(e)
                 break
 
-        # ----------------------------------------------------
-        # Close websocket
-        # ----------------------------------------------------
+            if "series_completed" in result:
+                break
 
-        try:
+        return self.__create_df(raw_data, symbol)
 
-            if self.ws:
-
-                self.ws.close()
-
-        except Exception:
-
-            pass
-
-        # ----------------------------------------------------
-        # Check completed
-        # ----------------------------------------------------
-
-        if not completed:
-
-            logging.warning(
-                "TradingView series was not completed for %s",
-                formatted_symbol
-            )
-
-        # ----------------------------------------------------
-        # Parse candles
-        # ----------------------------------------------------
-
-        df = self.__create_df(
-            raw_data,
-            formatted_symbol
-        )
-
-        # ----------------------------------------------------
-        # Empty
-        # ----------------------------------------------------
-
-        if df is None or df.empty:
-
-            logging.warning(
-                "No parsed candle data for %s",
-                formatted_symbol
-            )
-
-            return pd.DataFrame()
-
-        # ----------------------------------------------------
-        # Datetime cleanup
-        # ----------------------------------------------------
-
-        df["Datetime"] = pd.to_datetime(
-            df["Datetime"],
-            errors="coerce"
-        )
-
-        df = df.dropna(
-            subset=[
-                "Datetime"
-            ]
-        )
-
-        # ----------------------------------------------------
-        # Sort
-        # ----------------------------------------------------
-
-        df = df.sort_values(
-            "Datetime"
-        )
-
-        # ----------------------------------------------------
-        # Remove duplicates
-        # ----------------------------------------------------
-
-        df = df.drop_duplicates(
-            subset=[
-                "Datetime"
-            ]
-        )
-
-        # ----------------------------------------------------
-        # Reset
-        # ----------------------------------------------------
-
-        df = df.reset_index(
-            drop=True
-        )
-
-        logging.info(
-            "Received %s candles for %s",
-            len(df),
-            formatted_symbol
-        )
-
-        return df
-        # ========================================================
-    # SEARCH SYMBOL
-    # ========================================================
-
-    def search_symbol(
-        self,
-        text: str,
-        exchange: str = ""
-    ):
-
-        url = self.__search_url.format(
-            text,
-            exchange
-        )
+    def search_symbol(self, text: str, exchange: str = ''):
+        url = self.__search_url.format(text, exchange)
 
         symbols_list = []
-
         try:
+            resp = requests.get(url)
 
-            response = requests.get(
-                url,
-                headers=self.__signin_headers,
-                timeout=15
-            )
-
-            response.raise_for_status()
-
-            symbols_list = json.loads(
-                response.text
-                .replace("</em>", "")
-                .replace("<em>", "")
-            )
-
+            symbols_list = json.loads(resp.text.replace(
+                '</em>', '').replace('<em>', ''))
         except Exception as e:
-
-            logging.error(
-                "Symbol search error: %s",
-                e
-            )
+            st.error(e)
 
         return symbols_list
 
-
-# ============================================================
-# TEST
-# ============================================================
 
 if __name__ == "__main__":
 
