@@ -346,11 +346,7 @@ class TvDatafeed:
             )
         )
 
-    if isinstance(interval, Interval):
-        interval = interval.value
-    else:
-        interval = str(interval)
-        
+
     # ========================================================
     # SEND MESSAGE
     # ========================================================
@@ -692,271 +688,106 @@ class TvDatafeed:
 
     def get_hist(
         self,
-        symbol: str,
-        exchange: str = "NSE",
-        interval: Interval = Interval.in_daily,
-        n_bars: int = 10,
-        fut_contract: int = None,
-        extended_session: bool = False
+        symbol,
+        exchange,
+        interval=Interval.in_5_minute,
+        n_bars=500,
+        extended_session=False
     ):
-
-        # ====================================================
-        # KEEP ORIGINAL SYMBOL
-        # ====================================================
-
-        original_symbol = str(
-            symbol
-        ).strip()
-
-        # ====================================================
-        # FORMAT SYMBOL
-        # ====================================================
-
-        formatted_symbol = (
-            self.__format_symbol(
-                symbol=original_symbol,
-                exchange=exchange,
-                contract=fut_contract
-            )
+    
+        formatted_symbol = self.__format_symbol(symbol, exchange)
+    
+        # Resolve symbol
+        session_type = "extended" if extended_session else "regular"
+    
+        symbol_payload = (
+            '={"symbol":"'
+            + formatted_symbol
+            + '","adjustment":"splits","session":"'
+            + session_type
+            + '"}'
         )
-
-        # ====================================================
-        # INTERVAL
-        # ====================================================
-
-        if isinstance(
-            interval,
-            Interval
-        ):
-
-            interval_value = (
-                interval.value
-            )
-
+    
+        self.__send_message(
+            "resolve_symbol",
+            [
+                self.session,
+                "symbol_1",
+                symbol_payload
+            ]
+        )
+    
+        # ==========================================
+        # IMPORTANT FIX
+        # ==========================================
+        if isinstance(interval, Interval):
+            interval = interval.value
         else:
-
-            interval_value = str(
-                interval
-            )
-
-        # ====================================================
-        # LOG
-        # ====================================================
-
-        logging.info(
-            "================================================"
+            interval = str(interval)
+    
+        print("TradingView interval =", interval)
+    
+        # ==========================================
+        # CREATE SERIES
+        # ==========================================
+        self.__send_message(
+            "create_series",
+            [
+                self.session,
+                "s1",
+                "s1",
+                "symbol_1",
+                interval,
+                n_bars
+            ]
         )
-
-        logging.info(
-            "TradingView request"
+    
+        # Timezone
+        self.__send_message(
+            "switch_timezone",
+            [
+                self.session,
+                "Asia/Kolkata"
+            ]
         )
-
-        logging.info(
-            "Symbol       : %s",
-            formatted_symbol
-        )
-
-        logging.info(
-            "Interval     : %s",
-            interval_value
-        )
-
-        logging.info(
-            "Bars         : %s",
-            n_bars
-        )
-
-        logging.info(
-            "Fut Contract : %s",
-            fut_contract
-        )
-
-        logging.info(
-            "================================================"
-        )
-
-        # ====================================================
-        # CREATE CONNECTION
-        # ====================================================
-
-        if not self.__create_connection():
-
-            return pd.DataFrame()
-
+    
+        # Receive response
         raw_data = ""
-
-        completed = False
-
-        try:
-
-            # =================================================
-            # AUTH
-            # =================================================
-
-            self.__send_message(
-                "set_auth_token",
-                [
-                    self.token
-                ]
-            )
-
-            # =================================================
-            # CHART SESSION
-            # =================================================
-
-            self.__send_message(
-                "chart_create_session",
-                [
-                    self.chart_session,
-                    ""
-                ]
-            )
-
-            # =================================================
-            # IMPORTANT
-            #
-            # NO:
-            # quote_create_session
-            # quote_set_fields
-            # quote_add_symbols
-            # quote_fast_symbols
-            #
-            # This avoids:
-            # nse_dly permission denied
-            # =================================================
-
-            # =================================================
-            # RESOLVE SYMBOL
-            # =================================================
-
-            session_type = (
-                "extended"
-                if extended_session
-                else "regular"
-            )
-
-            symbol_payload = (
-                '={"symbol":"'
-                + formatted_symbol
-                + '","adjustment":"splits","session":"'
-                + session_type
-                + '"}'
-            )
-
-            self.__send_message(
-                "resolve_symbol",
-                [
-                    self.chart_session,
-                    "symbol_1",
-                    symbol_payload
-                ]
-            )
-
-            # =================================================
-            # CREATE SERIES
-            # =================================================
-
-            self.__send_message(
-                "create_series",
-                [
-                    self.chart_session,
-                    "s1",
-                    "s1",
-                    "symbol_1",
-                    interval_value,
-                    int(n_bars)
-                ]
-            )
-
-            # =================================================
-            # TIMEZONE
-            # =================================================
-
-            self.__send_message(
-                "switch_timezone",
-                [
-                    self.chart_session,
-                    "exchange"
-                ]
-            )
-
-            # =================================================
-            # RECEIVE
-            # =================================================
-
-            while True:
-
-                try:
-
-                    result = self.ws.recv()
-
-                except Exception as e:
-
-                    logging.error(
-                        "TradingView websocket receive error: %s",
-                        e
-                    )
-
+    
+        while True:
+            try:
+                result = self.ws.recv()
+                raw_data += result
+    
+                if "series_completed" in result:
                     break
-
-                if not result:
-
-                    continue
-
-                raw_data += (
-                    result
-                    + "\n"
-                )
-
-                # ---------------------------------------------
-                # DEBUG
-                # ---------------------------------------------
-
-                if self.ws_debug:
-
-                    print(
-                        "\nRECV:",
+    
+                if "series_error" in result:
+                    logging.error(
+                        "TradingView series error: %s",
                         result
                     )
-
-                # ---------------------------------------------
-                # ERROR RESPONSES
-                # ---------------------------------------------
-
-                if (
-                    "critical_error" in result
-                    or "protocol_error" in result
-                    or "series_error" in result
-                    or "symbol_error" in result
-                ):
-
+                    break
+    
+                if "critical_error" in result:
                     logging.error(
-                        "TradingView response: %s",
-                        result[:5000]
+                        "TradingView critical error: %s",
+                        result
                     )
-
                     break
-
-                # ---------------------------------------------
-                # COMPLETE
-                # ---------------------------------------------
-
-                if (
-                    "series_completed"
-                    in result
-                ):
-
-                    completed = True
-
-                    break
-
-        except Exception as e:
-
-            logging.error(
-                "TradingView request error: %s",
-                e
-            )
-
+    
+            except Exception as e:
+                logging.error(
+                    "TradingView websocket receive error: %s",
+                    e
+                )
+                break
+    
+        return self.__create_df(
+            raw_data,
+            formatted_symbol
+        )
+ 
         # ====================================================
         # CLOSE
         # ====================================================
