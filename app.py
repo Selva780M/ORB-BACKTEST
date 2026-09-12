@@ -345,7 +345,7 @@ def fetch_one_stock(
             raw = tv.get_hist(
                 symbol=symbol,
                 exchange="NSE",
-                interval=str(5), #str(Interval.in_5_minute),
+                interval=Interval.in_5_minute,
                 n_bars=int(n_bars),
                 extended_session=False,
             )
@@ -3020,19 +3020,6 @@ if selected_stock != "ALL STOCKS":
         )
 
 
-
-for symbol in ["SBIN", "ADANIPORTS", "APOLLOHOSP"]:
-    print("TEST:", symbol)
-
-    df = tv.get_hist(
-        symbol=symbol,
-        exchange="NSE",
-        interval="5",
-        n_bars=500,
-        extended_session=False
-    )
-
-    st.write(df.head() if df is not None else "NO DATA")
 
 
 
