@@ -190,64 +190,21 @@ def get_secret(name):
 @st.cache_resource
 def get_tv():
 
-    token = get_secret("TV_TOKEN")
+    token1 = get_secret("TV_TOKEN")
     username = get_secret("TV_USERNAME")
     password = get_secret("TV_PASSWORD")
-
-    # --------------------------------------------------------
-    # SHOW WHICH tvDatafeed.py IS ACTUALLY LOADED
-    # --------------------------------------------------------
-
-    try:
-        st.sidebar.caption(
-            f"📁 tvDatafeed: {tvDatafeed.__file__}"
-        )
-    except Exception:
-        pass
-
+    st.write(username,password,token1)
     # --------------------------------------------------------
     # TOKEN LOGIN
     # --------------------------------------------------------
-
-    if token:
-
-        st.sidebar.success(
-            "🔐 TradingView: TOKEN"
-        )
-
-        return TvDatafeed(
-            token=token
-        )
-
-    # --------------------------------------------------------
-    # USERNAME / PASSWORD
-    # --------------------------------------------------------
-
+    
     if username and password:
 
-        st.sidebar.success(
-            "🔐 TradingView: USERNAME/PASSWORD"
-        )
+        st.sidebar.success("🔐 TradingView: USERNAME/PASSWORD")
 
-        return TvDatafeed(
-            username=username,
-            password=password
-        )
-
-    # --------------------------------------------------------
-    # ANONYMOUS CONNECTION
-    # --------------------------------------------------------
-
-    st.sidebar.warning(
-        "⚠️ TradingView credentials not found."
-    )
-
-    st.sidebar.info(
-        "Using anonymous TradingView connection."
-    )
-
-    return TvDatafeed()
-
+        tv = TvDatafeed(username=username,password=password)
+        tv.token = token1
+        return tv, tv.token 
 
 
 # ============================================================
