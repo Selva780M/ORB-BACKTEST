@@ -1,4 +1,4 @@
-
+from tvDatafeed import TvDatafeed, Interval
 import os
 import time as pytime
 from datetime import time
