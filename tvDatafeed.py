@@ -9,9 +9,17 @@ import datetime
 import pandas as pd
 import pytz
 import requests
-import streamlit as st
-
 from websocket import create_connection
+
+
+# ============================================================
+# LOGGING
+# ============================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
 
 
 # ============================================================
@@ -20,11 +28,11 @@ from websocket import create_connection
 
 class Interval(enum.Enum):
 
-    in_30_minute = "30"
     in_1_minute = "1"
     in_3_minute = "3"
     in_5_minute = "5"
     in_15_minute = "15"
+    in_30_minute = "30"
     in_45_minute = "45"
 
     in_1_hour = "1H"
@@ -43,6 +51,10 @@ class Interval(enum.Enum):
 
 class TvDatafeed:
 
+    # ========================================================
+    # URLS
+    # ========================================================
+
     __sign_in_url = (
         "https://www.tradingview.com/accounts/signin/"
     )
@@ -53,16 +65,29 @@ class TvDatafeed:
         "&lang=en&type=&domain=production"
     )
 
-    # KEEP EXACTLY LIKE YOUR WORKING REFERENCE
-    __ws_headers = json.dumps({
-        "Origin": "https://data.tradingview.com"
-    })
+    # ========================================================
+    # HEADERS
+    # ========================================================
+
+    __ws_origin = (
+        "https://data.tradingview.com"
+    )
 
     __signin_headers = {
-        "Referer": "https://www.tradingview.com"
+        "Referer": "https://www.tradingview.com/",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 "
+            "(KHTML, like Gecko) "
+            "Chrome/153.0.0.0 Safari/537.36"
+        )
     }
 
-    __ws_timeout = 5
+    # ========================================================
+    # TIMEOUT
+    # ========================================================
+
+    __ws_timeout = 15
 
 
     # ========================================================
@@ -79,7 +104,7 @@ class TvDatafeed:
         self.ws_debug = False
 
         # ----------------------------------------------------
-        # Token first
+        # Authentication
         # ----------------------------------------------------
 
         if token:
@@ -94,12 +119,14 @@ class TvDatafeed:
             )
 
         # ----------------------------------------------------
-        # Anonymous fallback
+        # Anonymous token
         # ----------------------------------------------------
 
         if self.token is None:
 
-            self.token = "unauthorized_user_token"
+            self.token = (
+                "unauthorized_user_token"
+            )
 
         # ----------------------------------------------------
         # Sessions
@@ -117,7 +144,7 @@ class TvDatafeed:
 
 
     # ========================================================
-    # AUTH
+    # AUTHENTICATION
     # ========================================================
 
     def __auth(
@@ -126,7 +153,14 @@ class TvDatafeed:
         password
     ):
 
-        if username is None or password is None:
+        if (
+            username is None
+            or password is None
+        ):
+
+            logging.info(
+                "TradingView anonymous mode"
+            )
 
             return None
 
@@ -142,7 +176,7 @@ class TvDatafeed:
                 url=self.__sign_in_url,
                 data=data,
                 headers=self.__signin_headers,
-                timeout=10,
+                timeout=15
             )
 
             logging.info(
@@ -152,9 +186,27 @@ class TvDatafeed:
 
             result = response.json()
 
-            token = result["user"]["auth_token"]
+            if (
+                "user" in result
+                and "auth_token" in result["user"]
+            ):
 
-            return token
+                token = (
+                    result["user"]["auth_token"]
+                )
+
+                logging.info(
+                    "TradingView authentication successful"
+                )
+
+                return token
+
+            logging.error(
+                "TradingView authentication response invalid: %s",
+                result
+            )
+
+            return None
 
         except Exception as e:
 
@@ -167,7 +219,7 @@ class TvDatafeed:
 
 
     # ========================================================
-    # WEBSOCKET CONNECTION
+    # CREATE WEBSOCKET CONNECTION
     # ========================================================
 
     def __create_connection(self):
@@ -176,41 +228,31 @@ class TvDatafeed:
             "Creating TradingView websocket connection..."
         )
 
-        self.ws = create_connection(
-            "wss://data.tradingview.com/socket.io/websocket",
-            headers=self.__ws_headers,
-            timeout=self.__ws_timeout,
-        )
-
-        logging.info(
-            "TradingView websocket connected"
-        )
-
-
-    # ========================================================
-    # RAW MESSAGE FILTER
-    # ========================================================
-
-    @staticmethod
-    def __filter_raw_message(text):
-
         try:
 
-            found = re.search(
-                r'"m":"(.+?)",',
-                text
-            ).group(1)
+            self.ws = create_connection(
+                "wss://data.tradingview.com/socket.io/websocket",
+                origin=self.__ws_origin,
+                timeout=self.__ws_timeout,
+                host="data.tradingview.com"
+            )
 
-            found2 = re.search(
-                r'"p":(.+?"}"])}',
-                text
-            ).group(1)
+            logging.info(
+                "TradingView websocket connected"
+            )
 
-            return found, found2
+            return True
 
-        except AttributeError:
+        except Exception as e:
 
-            return None, None
+            logging.error(
+                "TradingView websocket connection failed: %s",
+                e
+            )
+
+            self.ws = None
+
+            return False
 
 
     # ========================================================
@@ -248,19 +290,23 @@ class TvDatafeed:
 
 
     # ========================================================
-    # MESSAGE
+    # MESSAGE HEADER
     # ========================================================
 
     @staticmethod
-    def __prepend_header(st):
+    def __prepend_header(message):
 
         return (
             "~m~"
-            + str(len(st))
+            + str(len(message))
             + "~m~"
-            + st
+            + message
         )
 
+
+    # ========================================================
+    # CONSTRUCT MESSAGE
+    # ========================================================
 
     @staticmethod
     def __construct_message(
@@ -277,19 +323,33 @@ class TvDatafeed:
         )
 
 
+    # ========================================================
+    # CREATE MESSAGE
+    # ========================================================
+
     def __create_message(
         self,
         func,
         param_list
     ):
 
-        return self.__prepend_header(
+        message = (
             self.__construct_message(
                 func,
                 param_list
             )
         )
 
+        return (
+            self.__prepend_header(
+                message
+            )
+        )
+
+
+    # ========================================================
+    # SEND MESSAGE
+    # ========================================================
 
     def __send_message(
         self,
@@ -297,16 +357,84 @@ class TvDatafeed:
         args
     ):
 
-        message = self.__create_message(
-            func,
-            args
+        if self.ws is None:
+
+            raise ConnectionError(
+                "TradingView websocket is not connected"
+            )
+
+        message = (
+            self.__create_message(
+                func,
+                args
+            )
         )
 
         if self.ws_debug:
 
-            print(message)
+            print(
+                "\nSEND:",
+                message
+            )
 
-        self.ws.send(message)
+        self.ws.send(
+            message
+        )
+
+
+    # ========================================================
+    # FORMAT SYMBOL
+    # ========================================================
+
+    @staticmethod
+    def __format_symbol(
+        symbol,
+        exchange,
+        contract=None
+    ):
+
+        symbol = str(
+            symbol
+        ).strip()
+
+        exchange = str(
+            exchange
+        ).strip().upper()
+
+        # ----------------------------------------------------
+        # Already formatted
+        # ----------------------------------------------------
+
+        if ":" in symbol:
+
+            return symbol
+
+        # ----------------------------------------------------
+        # CASH / EQUITY
+        # ----------------------------------------------------
+
+        if contract is None:
+
+            return (
+                f"{exchange}:{symbol}"
+            )
+
+        # ----------------------------------------------------
+        # FUTURES
+        # ----------------------------------------------------
+
+        if isinstance(
+            contract,
+            int
+        ):
+
+            return (
+                f"{exchange}:{symbol}{contract}!"
+            )
+
+        raise ValueError(
+            "contract must be an integer or None"
+        )
 
 
     # ========================================================
@@ -321,10 +449,30 @@ class TvDatafeed:
 
         try:
 
-            out = re.search(
+            # ------------------------------------------------
+            # Find series data
+            # ------------------------------------------------
+
+            match = re.search(
                 r'"s":\[(.+?)\}\]',
-                raw_data
-            ).group(1)
+                raw_data,
+                re.DOTALL
+            )
+
+            if not match:
+
+                logging.warning(
+                    "No candle series found for %s",
+                    symbol
+                )
+
+                return pd.DataFrame()
+
+            out = match.group(1)
+
+            # ------------------------------------------------
+            # Split individual bars
+            # ------------------------------------------------
 
             x = out.split(
                 ',{"'
@@ -332,70 +480,123 @@ class TvDatafeed:
 
             data = []
 
-            volume_data = True
-
             ist_tz = pytz.timezone(
                 "Asia/Kolkata"
             )
 
+            # ------------------------------------------------
+            # Parse each bar
+            # ------------------------------------------------
+
             for xi in x:
 
-                xi = re.split(
-                    r"\[|:|,|\]",
-                    xi
-                )
+                try:
 
-                # ------------------------------------------------
-                # Timestamp
-                # ------------------------------------------------
+                    values = re.split(
+                        r"\[|:|,|\]",
+                        xi
+                    )
 
-                ts = datetime.datetime.fromtimestamp(
-                    float(xi[4]),
-                    tz=pytz.utc
-                )
-
-                ts_ist = ts.astimezone(
-                    ist_tz
-                )
-
-                row = [ts_ist]
-
-                # ------------------------------------------------
-                # OHLCV
-                # ------------------------------------------------
-
-                for i in range(5, 10):
-
-                    # No volume
-                    if (
-                        not volume_data
-                        and i == 9
-                    ):
-
-                        row.append(0.0)
+                    # Need at least timestamp + OHLC
+                    if len(values) < 9:
 
                         continue
 
-                    try:
+                    # ------------------------------------------------
+                    # Timestamp
+                    # ------------------------------------------------
 
-                        row.append(
-                            float(xi[i])
+                    timestamp = float(
+                        values[4]
+                    )
+
+                    ts = datetime.datetime.fromtimestamp(
+                        timestamp,
+                        tz=pytz.utc
+                    )
+
+                    ts_ist = (
+                        ts.astimezone(
+                            ist_tz
                         )
+                    )
 
-                    except (
-                        ValueError,
-                        IndexError
-                    ):
+                    # ------------------------------------------------
+                    # OHLC
+                    # ------------------------------------------------
 
-                        volume_data = False
+                    open_price = float(
+                        values[5]
+                    )
 
-                        row.append(0.0)
+                    high_price = float(
+                        values[6]
+                    )
 
-                data.append(row)
+                    low_price = float(
+                        values[7]
+                    )
 
-            # ----------------------------------------------------
+                    close_price = float(
+                        values[8]
+                    )
+
+                    # ------------------------------------------------
+                    # Volume
+                    # ------------------------------------------------
+
+                    volume = 0.0
+
+                    if len(values) > 9:
+
+                        try:
+
+                            volume = float(
+                                values[9]
+                            )
+
+                        except (
+                            ValueError,
+                            TypeError
+                        ):
+
+                            volume = 0.0
+
+                    data.append(
+                        [
+                            ts_ist,
+                            open_price,
+                            high_price,
+                            low_price,
+                            close_price,
+                            volume
+                        ]
+                    )
+
+                except (
+                    ValueError,
+                    TypeError,
+                    IndexError
+                ):
+
+                    continue
+
+            # ------------------------------------------------
+            # Nothing parsed
+            # ------------------------------------------------
+
+            if not data:
+
+                logging.warning(
+                    "No parsed candle rows for %s",
+                    symbol
+                )
+
+                return pd.DataFrame()
+
+            # ------------------------------------------------
             # DataFrame
-            # ----------------------------------------------------
+            # ------------------------------------------------
 
             df = pd.DataFrame(
                 data,
@@ -405,26 +606,70 @@ class TvDatafeed:
                     "High",
                     "Low",
                     "Close",
-                    "Volume",
+                    "Volume"
                 ]
             )
+
+            # ------------------------------------------------
+            # Symbol
+            # ------------------------------------------------
 
             df.insert(
                 0,
                 "symbol",
-                value=symbol
-            )
-
-            return df
-
-        except AttributeError:
-
-            logging.warning(
-                "No candle data found for %s",
                 symbol
             )
 
-            return pd.DataFrame()
+            # ------------------------------------------------
+            # Datetime
+            # ------------------------------------------------
+
+            df["Datetime"] = pd.to_datetime(
+                df["Datetime"],
+                errors="coerce"
+            )
+
+            # ------------------------------------------------
+            # Remove invalid rows
+            # ------------------------------------------------
+
+            df = df.dropna(
+                subset=[
+                    "Datetime",
+                    "Open",
+                    "High",
+                    "Low",
+                    "Close"
+                ]
+            )
+
+            # ------------------------------------------------
+            # Sort
+            # ------------------------------------------------
+
+            df = df.sort_values(
+                "Datetime"
+            )
+
+            # ------------------------------------------------
+            # Remove duplicates
+            # ------------------------------------------------
+
+            df = df.drop_duplicates(
+                subset=[
+                    "Datetime"
+                ]
+            )
+
+            # ------------------------------------------------
+            # Reset index
+            # ------------------------------------------------
+
+            df = df.reset_index(
+                drop=True
+            )
+
+            return df
 
         except Exception as e:
 
@@ -438,46 +683,6 @@ class TvDatafeed:
 
 
     # ========================================================
-    # FORMAT SYMBOL
-    # ========================================================
-
-    @staticmethod
-    def __format_symbol(
-        symbol,
-        exchange,
-        contract=None
-    ):
-
-        # Already formatted
-        if ":" in symbol:
-
-            return symbol
-
-        # CASH / EQUITY
-        elif contract is None:
-
-            return (
-                f"{exchange}:{symbol}"
-            )
-
-        # FUTURES
-        elif isinstance(
-            contract,
-            int
-        ):
-
-            return (
-                f"{exchange}:{symbol}{contract}!"
-            )
-
-        else:
-
-            raise ValueError(
-                "not a valid contract"
-            )
-
-
-    # ========================================================
     # GET HISTORICAL DATA
     # ========================================================
 
@@ -488,198 +693,209 @@ class TvDatafeed:
         interval: Interval = Interval.in_daily,
         n_bars: int = 10,
         fut_contract: int = None,
-        extended_session: bool = False,
+        extended_session: bool = False
     ):
 
-        # ----------------------------------------------------
-        # FORMAT SYMBOL
-        # ----------------------------------------------------
+        # ====================================================
+        # KEEP ORIGINAL SYMBOL
+        # ====================================================
 
-        symbol = self.__format_symbol(
-            symbol=symbol,
-            exchange=exchange,
-            contract=fut_contract
+        original_symbol = str(
+            symbol
+        ).strip()
+
+        # ====================================================
+        # FORMAT SYMBOL
+        # ====================================================
+
+        formatted_symbol = (
+            self.__format_symbol(
+                symbol=original_symbol,
+                exchange=exchange,
+                contract=fut_contract
+            )
         )
 
-        interval = interval.value
+        # ====================================================
+        # INTERVAL
+        # ====================================================
+
+        if isinstance(
+            interval,
+            Interval
+        ):
+
+            interval_value = (
+                interval.value
+            )
+
+        else:
+
+            interval_value = str(
+                interval
+            )
+
+        # ====================================================
+        # LOG
+        # ====================================================
 
         logging.info(
-            "TradingView request: %s | interval=%s | bars=%s",
-            symbol,
-            interval,
+            "================================================"
+        )
+
+        logging.info(
+            "TradingView request"
+        )
+
+        logging.info(
+            "Symbol       : %s",
+            formatted_symbol
+        )
+
+        logging.info(
+            "Interval     : %s",
+            interval_value
+        )
+
+        logging.info(
+            "Bars         : %s",
             n_bars
         )
 
-        # ----------------------------------------------------
-        # CONNECTION
-        # ----------------------------------------------------
-
-        self.__create_connection()
-
-        # ----------------------------------------------------
-        # AUTH
-        # ----------------------------------------------------
-
-        self.__send_message(
-            "set_auth_token",
-            [
-                self.token
-            ]
+        logging.info(
+            "Fut Contract : %s",
+            fut_contract
         )
 
-        # ----------------------------------------------------
-        # CHART SESSION
-        # ----------------------------------------------------
-
-        self.__send_message(
-            "chart_create_session",
-            [
-                self.chart_session,
-                ""
-            ]
+        logging.info(
+            "================================================"
         )
 
-        # ----------------------------------------------------
-        # QUOTE SESSION
-        # ----------------------------------------------------
+        # ====================================================
+        # CREATE CONNECTION
+        # ====================================================
 
-        self.__send_message(
-            "quote_create_session",
-            [
-                self.session
-            ]
-        )
+        if not self.__create_connection():
 
-        # ----------------------------------------------------
-        # QUOTE FIELDS
-        # ----------------------------------------------------
-
-        self.__send_message(
-            "quote_set_fields",
-            [
-                self.session,
-
-                "ch",
-                "chp",
-                "current_session",
-                "description",
-                "local_description",
-                "language",
-                "exchange",
-                "fractional",
-                "is_tradable",
-                "lp",
-                "lp_time",
-                "minmov",
-                "minmove2",
-                "original_name",
-                "pricescale",
-                "pro_name",
-                "short_name",
-                "type",
-                "update_mode",
-                "volume",
-                "currency_code",
-                "rchp",
-                "rtc",
-            ],
-        )
-
-        # ----------------------------------------------------
-        # ADD SYMBOL
-        #
-        # IMPORTANT:
-        # force_permission
-        # ----------------------------------------------------
-
-        self.__send_message(
-            "quote_add_symbols",
-            [
-                self.session,
-                symbol,
-                {
-                    "flags": [
-                        "force_permission"
-                    ]
-                }
-            ]
-        )
-
-        # ----------------------------------------------------
-        # FAST SYMBOL
-        # ----------------------------------------------------
-
-        self.__send_message(
-            "quote_fast_symbols",
-            [
-                self.session,
-                symbol
-            ]
-        )
-
-        # ----------------------------------------------------
-        # RESOLVE SYMBOL
-        #
-        # KEEP SAME FORMAT AS WORKING CODE
-        # ----------------------------------------------------
-
-        self.__send_message(
-            "resolve_symbol",
-            [
-                self.chart_session,
-                "symbol_1",
-
-                '={"symbol":"'
-                + symbol
-                + '","adjustment":"splits","session":'
-                + (
-                    '"regular"'
-                    if not extended_session
-                    else '"extended"'
-                )
-                + "}",
-            ],
-        )
-
-        # ----------------------------------------------------
-        # CREATE SERIES
-        # ----------------------------------------------------
-
-        self.__send_message(
-            "create_series",
-            [
-                self.chart_session,
-                "s1",
-                "s1",
-                "symbol_1",
-                interval,
-                n_bars
-            ]
-        )
-
-        # ----------------------------------------------------
-        # TIMEZONE
-        # ----------------------------------------------------
-
-        self.__send_message(
-            "switch_timezone",
-            [
-                self.chart_session,
-                "exchange"
-            ]
-        )
-
-        # ----------------------------------------------------
-        # RECEIVE DATA
-        # ----------------------------------------------------
+            return pd.DataFrame()
 
         raw_data = ""
 
-        while True:
+        completed = False
 
-            try:
+        try:
 
-                result = self.ws.recv()
+            # =================================================
+            # AUTH
+            # =================================================
+
+            self.__send_message(
+                "set_auth_token",
+                [
+                    self.token
+                ]
+            )
+
+            # =================================================
+            # CHART SESSION
+            # =================================================
+
+            self.__send_message(
+                "chart_create_session",
+                [
+                    self.chart_session,
+                    ""
+                ]
+            )
+
+            # =================================================
+            # IMPORTANT
+            #
+            # NO:
+            # quote_create_session
+            # quote_set_fields
+            # quote_add_symbols
+            # quote_fast_symbols
+            #
+            # This avoids:
+            # nse_dly permission denied
+            # =================================================
+
+            # =================================================
+            # RESOLVE SYMBOL
+            # =================================================
+
+            session_type = (
+                "extended"
+                if extended_session
+                else "regular"
+            )
+
+            symbol_payload = (
+                '{"symbol":"'
+                + formatted_symbol
+                + '",'
+                '"adjustment":"splits",'
+                '"session":"'
+                + session_type
+                + '"}'
+            )
+
+            self.__send_message(
+                "resolve_symbol",
+                [
+                    self.chart_session,
+                    "symbol_1",
+                    symbol_payload
+                ]
+            )
+
+            # =================================================
+            # CREATE SERIES
+            # =================================================
+
+            self.__send_message(
+                "create_series",
+                [
+                    self.chart_session,
+                    "s1",
+                    "s1",
+                    "symbol_1",
+                    interval_value,
+                    int(n_bars)
+                ]
+            )
+
+            # =================================================
+            # TIMEZONE
+            # =================================================
+
+            self.__send_message(
+                "switch_timezone",
+                [
+                    self.chart_session,
+                    "exchange"
+                ]
+            )
+
+            # =================================================
+            # RECEIVE
+            # =================================================
+
+            while True:
+
+                try:
+
+                    result = self.ws.recv()
+
+                except Exception as e:
+
+                    logging.error(
+                        "TradingView websocket receive error: %s",
+                        e
+                    )
+
+                    break
 
                 if not result:
 
@@ -690,77 +906,140 @@ class TvDatafeed:
                     + "\n"
                 )
 
-                # ------------------------------------------------
-                # Debug important responses only
-                # ------------------------------------------------
+                # ---------------------------------------------
+                # DEBUG
+                # ---------------------------------------------
+
+                if self.ws_debug:
+
+                    print(
+                        "\nRECV:",
+                        result
+                    )
+
+                # ---------------------------------------------
+                # ERROR RESPONSES
+                # ---------------------------------------------
 
                 if (
                     "critical_error" in result
                     or "protocol_error" in result
                     or "series_error" in result
+                    or "symbol_error" in result
                 ):
 
                     logging.error(
                         "TradingView response: %s",
-                        result[:3000]
+                        result[:5000]
                     )
-
-                # ------------------------------------------------
-                # Finished
-                # ------------------------------------------------
-
-                if "series_completed" in result:
 
                     break
 
-            except Exception as e:
+                # ---------------------------------------------
+                # COMPLETE
+                # ---------------------------------------------
 
-                logging.error(
-                    "TradingView websocket receive error: %s",
-                    e
-                )
+                if (
+                    "series_completed"
+                    in result
+                ):
 
-                break
+                    completed = True
 
-        # ----------------------------------------------------
-        # PARSE
-        # ----------------------------------------------------
+                    break
 
-        df = self.__create_df(
-            raw_data,
-            symbol
-        )
+        except Exception as e:
 
-        # ----------------------------------------------------
+            logging.error(
+                "TradingView request error: %s",
+                e
+            )
+
+        # ====================================================
         # CLOSE
-        # ----------------------------------------------------
+        # ====================================================
 
         try:
 
-            self.ws.close()
+            if self.ws:
+
+                self.ws.close()
 
         except Exception:
 
             pass
 
-        # ----------------------------------------------------
-        # RESULT
-        # ----------------------------------------------------
+        # ====================================================
+        # NOT COMPLETED
+        # ====================================================
+
+        if not completed:
+
+            logging.warning(
+                "TradingView series was not completed for %s",
+                formatted_symbol
+            )
+
+        # ====================================================
+        # PARSE
+        # ====================================================
+
+        df = self.__create_df(
+            raw_data,
+            original_symbol
+        )
+
+        # ====================================================
+        # EMPTY
+        # ====================================================
 
         if df is None or df.empty:
 
             logging.warning(
                 "No parsed candle data for %s",
-                symbol
+                formatted_symbol
             )
 
-        else:
+            return pd.DataFrame()
 
-            logging.info(
-                "Received %s candles for %s",
-                len(df),
-                symbol
-            )
+        # ====================================================
+        # FINAL CLEANUP
+        # ====================================================
+
+        df["Datetime"] = pd.to_datetime(
+            df["Datetime"],
+            errors="coerce"
+        )
+
+        df = df.dropna(
+            subset=[
+                "Datetime"
+            ]
+        )
+
+        df = df.sort_values(
+            "Datetime"
+        )
+
+        df = df.drop_duplicates(
+            subset=[
+                "Datetime"
+            ]
+        )
+
+        df = df.reset_index(
+            drop=True
+        )
+
+        # ====================================================
+        # RESULT
+        # ====================================================
+
+        logging.info(
+            "Received %s candles for %s",
+            len(df),
+            formatted_symbol
+        )
 
         return df
 
@@ -784,13 +1063,16 @@ class TvDatafeed:
 
         try:
 
-            resp = requests.get(
+            response = requests.get(
                 url,
-                timeout=10
+                headers=self.__signin_headers,
+                timeout=15
             )
 
+            response.raise_for_status()
+
             symbols_list = json.loads(
-                resp.text
+                response.text
                 .replace("</em>", "")
                 .replace("<em>", "")
             )
@@ -803,3 +1085,17 @@ class TvDatafeed:
             )
 
         return symbols_list
+
+
+# ============================================================
+# TEST
+# ============================================================
+
+if __name__ == "__main__":
+
+    logging.info(
+        "Starting TradingView test..."
+    )
+
+    tv = TvDatafeed()
+
