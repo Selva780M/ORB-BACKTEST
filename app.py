@@ -270,7 +270,7 @@ def fetch_one_stock(
         retries + 1
     ):
 
-        try:
+         try:
                 raw = tv.get_hist(
                 symbol=symbol,                
                 exchange="NSE",
