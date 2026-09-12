@@ -1017,7 +1017,7 @@ class TvDatafeed:
                 fut_contract
             )
         )
-
+        st.write(symbol)
 
         # ----------------------------------------------------
         # Resolution
@@ -1117,9 +1117,7 @@ class TvDatafeed:
                     self.chart_session,
 
                     "symbol_1",
-
-                    "="
-                    +
+                    
                     symbol_payload,
                 ]
             )
