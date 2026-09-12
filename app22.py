@@ -54,27 +54,84 @@ def get_secret(name):
 # TRADINGVIEW CONNECTION
 # ============================================================
 
+
 @st.cache_resource
 def create_tv_connection():
 
-    token = get_secret("TV_TOKEN")
-    username = get_secret("TV_USERNAME")
-    password = get_secret("TV_PASSWORD")
+    # ========================================================
+    # READ ALL TRADINGVIEW CREDENTIAL TYPES
+    # ========================================================
 
-    # --------------------------------------------------------
-    # SHOW WHICH tvDatafeed.py IS ACTUALLY LOADED
-    # --------------------------------------------------------
+    sessionid = get_secret("TV_SESSIONID")
+
+    sessionid_sign = get_secret(
+        "TV_SESSIONID_SIGN"
+    )
+
+    auth_token = get_secret(
+        "TV_AUTH_TOKEN"
+    )
+
+    token = get_secret(
+        "TV_TOKEN"
+    )
+
+    username = get_secret(
+        "TV_USERNAME"
+    )
+
+    password = get_secret(
+        "TV_PASSWORD"
+    )
+
+    # ========================================================
+    # SHOW ACTUAL tvDatafeed.py
+    # ========================================================
 
     try:
+
         st.sidebar.caption(
             f"📁 tvDatafeed: {tvDatafeed.__file__}"
         )
+
     except Exception:
+
         pass
 
-    # --------------------------------------------------------
-    # TOKEN LOGIN
-    # --------------------------------------------------------
+    # ========================================================
+    # 1. SESSIONID
+    # ========================================================
+
+    if sessionid:
+
+        st.sidebar.success(
+            "🔐 TradingView: SESSIONID"
+        )
+
+        return TvDatafeed(
+
+            sessionid=sessionid,
+
+            sessionid_sign=sessionid_sign,
+        )
+
+    # ========================================================
+    # 2. AUTH TOKEN
+    # ========================================================
+
+    if auth_token:
+
+        st.sidebar.success(
+            "🔐 TradingView: AUTH TOKEN"
+        )
+
+        return TvDatafeed(
+            token=auth_token
+        )
+
+    # ========================================================
+    # 3. OLD TV_TOKEN
+    # ========================================================
 
     if token:
 
@@ -86,9 +143,9 @@ def create_tv_connection():
             token=token
         )
 
-    # --------------------------------------------------------
-    # USERNAME / PASSWORD
-    # --------------------------------------------------------
+    # ========================================================
+    # 4. USERNAME / PASSWORD
+    # ========================================================
 
     if username and password:
 
@@ -97,13 +154,15 @@ def create_tv_connection():
         )
 
         return TvDatafeed(
+
             username=username,
-            password=password
+
+            password=password,
         )
 
-    # --------------------------------------------------------
-    # ANONYMOUS CONNECTION
-    # --------------------------------------------------------
+    # ========================================================
+    # 5. ANONYMOUS
+    # ========================================================
 
     st.sidebar.warning(
         "⚠️ TradingView credentials not found."
@@ -114,6 +173,7 @@ def create_tv_connection():
     )
 
     return TvDatafeed()
+
 
 
 # ============================================================
@@ -343,8 +403,9 @@ def fetch_one_stock(
             raw = tv.get_hist(
                 symbol=symbol,
                 exchange="NSE",
-                interval="5",
+                interval=Interval.in_5_minute,                
                 n_bars=int(n_bars),
+                fut_contract=None,
                 extended_session=False,
             )
 
