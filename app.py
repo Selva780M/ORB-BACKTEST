@@ -1,38 +1,13 @@
-# ============================================================
-# TRADINGVIEW 5-MIN ORB BACKTEST
-# Direct TradingView Fetch - NO INPUT CSV
-# ============================================================
+
 
 import os
 import time as pytime
 from datetime import time
-
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-
-# ============================================================
-# TVDATAFEED IMPORT
-# ============================================================
-#
-# OPTION 1:
-# If your TvDatafeed and Interval classes are in tvDatafeed.py:
-#
-# from tvDatafeed import TvDatafeed, Interval
-#
-# OPTION 2:
-# If you already pasted your custom TvDatafeed class above,
-# keep that class above this section.
-#
-# ============================================================
-
 from tvDatafeed import TvDatafeed, Interval
 
-
-# ============================================================
-# PAGE
-# ============================================================
 
 st.set_page_config(
     page_title="TradingView ORB Backtest",
@@ -77,11 +52,13 @@ def get_secret(name):
 def create_tv_connection():
 
     token = get_secret("TV_TOKEN")
+    st.print(token)
 
     username = get_secret(
         "TV_USERNAME"
     )
-
+    st.print(username)
+    
     password = get_secret(
         "TV_PASSWORD"
     )
