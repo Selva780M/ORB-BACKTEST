@@ -264,24 +264,23 @@ def fetch_one_stock(
 
     last_error = None
 
-    for attempt in range(
-        retries + 1
-    ):
+    for attempt in range(retries + 1):
 
-         try:
-                raw = tv.get_hist(
-                symbol=symbol,                
+        try:
+
+            raw = tv.get_hist(
+                symbol=symbol,
                 exchange="NSE",
                 interval=Interval.in_5_minute,
-                n_bars=n_bars,
-                fut_contract=0,
+                n_bars=int(n_bars),
+                fut_contract=None,
                 extended_session=False,
             )
 
             df = normalize_tv_data(
-             raw,
-             symbol
-             )
+                raw,
+                symbol
+            )
 
             if (
                 df is None
@@ -305,7 +304,6 @@ def fetch_one_stock(
     raise RuntimeError(
         f"{symbol}: {last_error}"
     )
-
 
 # ============================================================
 # FETCH ALL STOCKS
