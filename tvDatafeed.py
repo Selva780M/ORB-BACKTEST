@@ -676,65 +676,57 @@ class TvDatafeed:
         fut_contract: int = None,
         extended_session: bool = False
     ):
-
+    
         # ====================================================
         # SYMBOL
         # ====================================================
-
+    
         symbol = self.__format_symbol(
             symbol,
             exchange,
             fut_contract
         )
-
+    
         # ====================================================
         # INTERVAL
         # ====================================================
-
-        if isinstance(
-            interval,
-            Interval
-        ):
-
+    
+        if isinstance(interval, Interval):
             interval_value = interval.value
-
         else:
-
-            interval_value = str(
-                interval
-            )
-
+            interval_value = str(interval)
+    
         logging.info(
             "TradingView symbol = %s",
             symbol
         )
-
+    
         logging.info(
             "TradingView interval = %s",
             interval_value
         )
-
+    
         # ====================================================
         # CONNECTION
         # ====================================================
-
+    
         self.__create_connection()
-
+    
         # ====================================================
         # AUTH
         # ====================================================
-
+    
         self.__send_message(
             "set_auth_token",
             [
                 self.token
             ]
         )
-
+    
         # ====================================================
         # CHART SESSION
         # ====================================================
-
+    
         self.__send_message(
             "chart_create_session",
             [
@@ -742,74 +734,39 @@ class TvDatafeed:
                 ""
             ]
         )
-
-        # ========================================================
+    
+        # ====================================================
         # SYMBOL RESOLUTION
-        # ========================================================
-        
+        # ====================================================
+    
         symbol_id = "sds_sym_1"
-        
+    
+        session_type = (
+            "extended"
+            if extended_session
+            else "regular"
+        )
+    
         symbol_payload = (
             '={"symbol":"'
             + symbol
             + '",'
             '"adjustment":"splits",'
-            '"session":"regular",'
-            '"currencyCode":"INR",'
-            '"unitId":"base",'
-            '"force_permission":true'
-            '}'
-        )
-        
-        logging.info(
-            "TradingView resolving symbol = %s",
-            symbol
-        )
-        
-        logging.info(
-            "TradingView symbol_payload = %s",
-            symbol_payload
-        )
-        
-        self.__send_message(
-            "resolve_symbol",
-            [
-                self.chart_session,
-                symbol_id,
-                symbol_payload
-            ]
-        )                
-        # --------------------------------------------------------
-        # TradingView symbol payload
-        # --------------------------------------------------------
-        
-        symbol_payload = (
-            '={"symbol":"'
-            + symbol
-            + '","adjustment":"splits"'
-            + ',"session":"'
+            '"session":"'
             + session_type
-            + '"'
-            + ',"currencyCode":"INR"'
-            + ',"unitId":"base"'
-            + '}'
+            + '"}'
         )
-        
-        logging.info(
-            "TradingView resolving symbol = %s",
-            symbol
-        )
-        
+    
         logging.info(
             "TradingView symbol_id = %s",
             symbol_id
         )
-        
+    
         logging.info(
             "TradingView symbol_payload = %s",
             symbol_payload
         )
-        
+    
         self.__send_message(
             "resolve_symbol",
             [
@@ -818,10 +775,23 @@ class TvDatafeed:
                 symbol_payload
             ]
         )
+    
+        # ====================================================
+        # TIMEZONE
+        # ====================================================
+    
+        self.__send_message(
+            "switch_timezone",
+            [
+                self.chart_session,
+                "exchange"
+            ]
+        )
+    
         # ====================================================
         # CREATE SERIES
         # ====================================================
-
+    
         create_series_args = [
             self.chart_session,
             "sds_1",
@@ -830,204 +800,181 @@ class TvDatafeed:
             interval_value,
             int(n_bars)
         ]
-
+    
         logging.info(
             "CREATE_SERIES = %r",
             create_series_args
         )
-
+    
         self.__send_message(
             "create_series",
             create_series_args
         )
-
-        # ====================================================
-        # TIMEZONE
-        # ====================================================
-
-        self.__send_message(
-            "switch_timezone",
-            [
-                self.chart_session,
-                "exchange"
-            ]
-        )
-
+    
         # ====================================================
         # RECEIVE
         # ====================================================
-
+    
         raw_data = ""
-
+    
         series_completed = False
-
+    
         while True:
-
+    
             try:
-
                 result = self.ws.recv()
-
+    
             except Exception as e:
-
+    
                 logging.exception(
                     "TradingView websocket receive error"
                 )
-
+    
                 break
-
+    
             if not result:
-
                 continue
-
-            # ------------------------------------------------
-            # Store
-            # ------------------------------------------------
-
+    
             raw_data += result + "\n"
-
-            # ------------------------------------------------
+    
+            # =================================================
             # DEBUG
-            # ------------------------------------------------
-
+            # =================================================
+    
             if self.ws_debug:
-
+    
                 logging.info(
                     "TV RECEIVE: %s",
                     result
                 )
-
-            # ------------------------------------------------
+    
+            # =================================================
             # HEARTBEAT
-            # ------------------------------------------------
-
+            # =================================================
+    
             heartbeat = re.search(
                 r"~m~\d+~m~~h~(\d+)",
                 result
             )
-
+    
             if heartbeat:
-
-                heartbeat_value = (
-                    heartbeat.group(1)
-                )
-
+    
+                heartbeat_value = heartbeat.group(1)
+    
                 heartbeat_message = (
                     "~m~"
                     + str(
                         len(
-                            "~h~"
-                            + heartbeat_value
+                            "~h~" + heartbeat_value
                         )
                     )
                     + "~m~~h~"
                     + heartbeat_value
                 )
-
+    
                 try:
-
                     self.ws.send(
                         heartbeat_message
                     )
-
+    
                 except Exception:
-
                     pass
-
+    
                 continue
-
-            # ------------------------------------------------
+    
+            # =================================================
             # SYMBOL ERROR
-            # ------------------------------------------------
-
+            # =================================================
+    
             if '"m":"symbol_error"' in result:
-
+    
                 logging.error(
                     "TradingView SYMBOL ERROR:"
                 )
-
+    
                 logging.error(
                     result
                 )
-
+    
                 break
-
-            # ------------------------------------------------
+    
+            # =================================================
             # SERIES ERROR
-            # ------------------------------------------------
-
+            # =================================================
+    
             if '"m":"series_error"' in result:
-
+    
                 logging.error(
                     "TradingView SERIES ERROR:"
                 )
-
+    
                 logging.error(
                     result
                 )
-
+    
                 break
-
-            # ------------------------------------------------
-            # CRITICAL
-            # ------------------------------------------------
-
+    
+            # =================================================
+            # CRITICAL ERROR
+            # =================================================
+    
             if '"m":"critical_error"' in result:
-
+    
                 logging.error(
                     "TradingView CRITICAL ERROR:"
                 )
-
+    
                 logging.error(
                     result
                 )
-
+    
                 break
-
-            # ------------------------------------------------
+    
+            # =================================================
             # COMPLETE
-            # ------------------------------------------------
-
+            # =================================================
+    
             if '"m":"series_completed"' in result:
-
+    
                 logging.info(
                     "TradingView series completed"
                 )
-
+    
                 series_completed = True
-
+    
                 break
-
+    
         # ====================================================
         # CLOSE
         # ====================================================
-
+    
         try:
-
+    
             if self.ws:
-
                 self.ws.close()
-
+    
         except Exception:
-
             pass
-
+    
         # ====================================================
         # RESULT
         # ====================================================
-
+    
         if not series_completed:
-
+    
             logging.warning(
                 "TradingView series was not completed for %s",
                 symbol
             )
-
+    
         df = self.__create_df(
             raw_data,
             symbol
         )
-
+    
         return df
+
+
 
 
     # ========================================================
