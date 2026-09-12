@@ -271,7 +271,7 @@ def fetch_one_stock(
     ):
 
         try:
-
+            st.write(symbol)
             raw = tv.get_hist(
                 symbol=symbol,                
                 exchange="NSE",
