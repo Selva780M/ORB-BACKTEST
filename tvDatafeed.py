@@ -752,8 +752,13 @@ class TvDatafeed:
         symbol_payload = (
             '={"symbol":"'
             + symbol
-            + '","adjustment":"splits"'
-            + '}'
+            + '",'
+            '"adjustment":"splits",'
+            '"session":"regular",'
+            '"currencyCode":"INR",'
+            '"unitId":"base",'
+            '"force_permission":true'
+            '}'
         )
         
         logging.info(
@@ -773,8 +778,7 @@ class TvDatafeed:
                 symbol_id,
                 symbol_payload
             ]
-        )
-                
+        )                
         # --------------------------------------------------------
         # TradingView symbol payload
         # --------------------------------------------------------
