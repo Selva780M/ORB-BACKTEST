@@ -708,6 +708,16 @@ class TvDatafeed:
             ]
         )
 
+        # ============================================================
+        # RESOLVE SYMBOL 
+        # ============================================================ 
+        session_type = ( "extended" if extended_session else "regular" ) 
+        symbol_id = "sds_sym_1" 
+        symbol_payload = ( '={"symbol":"' + symbol + '","adjustment":"splits","session":"' + session_type + '"}' )
+        logging.info( "TradingView resolving symbol = %s", symbol ) 
+        logging.info( "TradingView symbol payload = %s", symbol_payload ) 
+        self.__send_message( "resolve_symbol", [ self.chart_session, symbol_id, symbol_payload ] )
+        
         # ====================================================
         # CREATE SERIES
         # ====================================================
@@ -723,9 +733,9 @@ class TvDatafeed:
 
         create_series_args = [
             self.chart_session,
+            "sds_1",
             "s1",
-            "s1",
-            "symbol_1",
+            symbol_id,
             interval_value,
             int(n_bars)
         ]
