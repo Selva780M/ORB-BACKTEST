@@ -158,14 +158,96 @@ with st.expander("🐍 Python / Module Details"):
         )
 
 
+
+
 # ============================================================
-# TV OBJECT
+# SECRETS
+# ============================================================
+
+def get_secret(name):
+
+    value = os.getenv(name)
+
+    if value:
+        return value
+
+    try:
+        value = st.secrets[name]
+
+        if value:
+            return value
+
+    except Exception:
+        pass
+
+    return None
+
+
+# ============================================================
+# TRADINGVIEW CONNECTION
 # ============================================================
 
 @st.cache_resource
 def get_tv():
 
+    token = get_secret("TV_TOKEN")
+    username = get_secret("TV_USERNAME")
+    password = get_secret("TV_PASSWORD")
+
+    # --------------------------------------------------------
+    # SHOW WHICH tvDatafeed.py IS ACTUALLY LOADED
+    # --------------------------------------------------------
+
+    try:
+        st.sidebar.caption(
+            f"📁 tvDatafeed: {tvDatafeed.__file__}"
+        )
+    except Exception:
+        pass
+
+    # --------------------------------------------------------
+    # TOKEN LOGIN
+    # --------------------------------------------------------
+
+    if token:
+
+        st.sidebar.success(
+            "🔐 TradingView: TOKEN"
+        )
+
+        return TvDatafeed(
+            token=token
+        )
+
+    # --------------------------------------------------------
+    # USERNAME / PASSWORD
+    # --------------------------------------------------------
+
+    if username and password:
+
+        st.sidebar.success(
+            "🔐 TradingView: USERNAME/PASSWORD"
+        )
+
+        return TvDatafeed(
+            username=username,
+            password=password
+        )
+
+    # --------------------------------------------------------
+    # ANONYMOUS CONNECTION
+    # --------------------------------------------------------
+
+    st.sidebar.warning(
+        "⚠️ TradingView credentials not found."
+    )
+
+    st.sidebar.info(
+        "Using anonymous TradingView connection."
+    )
+
     return TvDatafeed()
+
 
 
 # ============================================================
